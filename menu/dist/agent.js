@@ -16941,9 +16941,15 @@ std_string_c_str (StdString * self)
   var state = {
     noCollision: false,
     noTraffic: false,
-    superSpeed: false
+    superSpeed: false,
+    noBoundary: false,
+    slowTraffic: false,
+    speedMult: 3
   };
-  var speedTimer = null;
+  var lastStatus = "haz\u0131r";
+  var carStartHook = null;
+  var originals = /* @__PURE__ */ new Map();
+  var spawnerOriginals = /* @__PURE__ */ new Map();
   function csClass(name) {
     for (const asmName of ["Assembly-CSharp", "Assembly-CSharp-firstpass"]) {
       try {
@@ -16967,10 +16973,33 @@ std_string_c_str (StdString * self)
         cb(obj);
         n++;
       } catch (e) {
-        log(`${className} \xF6rne\u011Fi atland\u0131: ${e.message ?? e}`);
+        log(`${className} atland\u0131: ${e.message ?? e}`);
       }
     }
     return n;
+  }
+  function status(msg) {
+    lastStatus = msg;
+    log(msg);
+  }
+  function toggleStub(className, methods, on) {
+    const k = csClass(className);
+    if (k == null) {
+      log(`${className} yok`);
+      return;
+    }
+    for (const name of methods) {
+      try {
+        const m = k.method(name);
+        if (on)
+          m.implementation = function() {
+          };
+        else
+          m.revert();
+      } catch (e) {
+        log(`${className}.${name}: ${e.message ?? e}`);
+      }
+    }
   }
   function getMoney() {
     const sec = csClass("SecureSaveGameManager");
@@ -16982,12 +17011,12 @@ std_string_c_str (StdString * self)
     const sec = csClass("SecureSaveGameManager");
     const old = csClass("SaveGameManager");
     if (sec == null || old == null) {
-      log("kay\u0131t y\xF6neticisi bulunamad\u0131");
+      status("kay\u0131t y\xF6neticisi yok");
       return;
     }
     old.method("saveTotalMoney").invoke(amount, true);
     sec.method("saveTotalMoneyNew").invoke(amount, true);
-    log(`para -> ${amount}`);
+    status(`para: ${amount.toLocaleString("tr")}`);
   }
   function addMoney(delta) {
     Il2Cpp.perform(() => {
@@ -17011,7 +17040,7 @@ std_string_c_str (StdString * self)
         } catch (e) {
         }
       }
-      log(`${n} araba a\xE7\u0131ld\u0131`);
+      status(`${n} araba a\xE7\u0131ld\u0131`);
     });
   }
   function maxUpgrades() {
@@ -17034,7 +17063,7 @@ std_string_c_str (StdString * self)
         } catch (e) {
         }
       }
-      log("y\xFCkseltmeler ve g\xF6rsel kilitler maksimuma \xE7ekildi");
+      status("y\xFCkseltmeler ve g\xF6rseller maksimum");
     });
   }
   function unlockExtras() {
@@ -17043,7 +17072,7 @@ std_string_c_str (StdString * self)
       const old = csClass("SaveGameManager");
       if (sec == null || old == null)
         return;
-      const secFlags = [
+      for (const m of [
         "saveHasRemoveAds",
         "saveHasDoubleCash",
         "saveHasStarterKit",
@@ -17053,130 +17082,224 @@ std_string_c_str (StdString * self)
         "saveLocationAutumnAvailable",
         "saveLocationForestAvailable",
         "saveLocationDesertAvailable"
-      ];
-      for (const m of secFlags) {
+      ]) {
         try {
           sec.method(m).invoke(true, true);
         } catch (e) {
         }
       }
-      const oldFlags = [
+      for (const m of [
         "saveLocationSnowyAvailable",
         "saveLocationCityAvailable",
         "saveLocationRainyAvailable",
         "saveLocationAutumnAvailable",
         "saveLocationForestAvailable",
         "saveLocationDesertAvailable"
-      ];
-      for (const m of oldFlags) {
+      ]) {
         try {
           old.method(m).invoke(true, true);
         } catch (e) {
         }
       }
-      log("reklams\u0131z + \xE7ift para + t\xFCm lokasyonlar a\xE7\u0131ld\u0131");
+      status("reklams\u0131z + \xE7ift para + haritalar");
+    });
+  }
+  function maxScores() {
+    Il2Cpp.perform(() => {
+      const old = csClass("SaveGameManager");
+      if (old == null)
+        return;
+      for (const m of [
+        "saveBestExtremeScoreNormal",
+        "saveBestSprintScoreNormal",
+        "saveBestTimeAttackScoreNormal",
+        "saveBestPoliceChaseScore"
+      ]) {
+        try {
+          old.method(m).invoke(999999);
+        } catch (e) {
+        }
+      }
+      status("skorlar maksimuma \xE7ekildi");
     });
   }
   function setNoCollision(on) {
     Il2Cpp.perform(() => {
-      const k = csClass("CarCollisionDetector");
-      if (k == null) {
-        log("CarCollisionDetector yok");
-        return;
-      }
-      for (const name of ["OnTriggerEnter", "OnTriggerStay"]) {
-        try {
-          const m = k.method(name);
-          if (on)
-            m.implementation = function() {
-            };
-          else
-            m.revert();
-        } catch (e) {
-          log(`${name} hook hatas\u0131: ${e.message ?? e}`);
-        }
-      }
+      toggleStub("CarCollisionDetector", ["OnTriggerEnter", "OnTriggerStay"], on);
       state.noCollision = on;
-      log(`\xE7arp\u0131\u015Fma ${on ? "KAPALI" : "a\xE7\u0131k"}`);
+      status(`\xE7arp\u0131\u015Fma ${on ? "KAPALI" : "a\xE7\u0131k"}`);
+    });
+  }
+  function setNoBoundary(on) {
+    Il2Cpp.perform(() => {
+      toggleStub("CarMover", ["checkBoundary", "hitBoundary"], on);
+      state.noBoundary = on;
+      status(`yol s\u0131n\u0131r\u0131 ${on ? "KAPALI" : "a\xE7\u0131k"}`);
     });
   }
   function setNoTraffic(on) {
     Il2Cpp.perform(() => {
-      const k = csClass("RandomCarSpawner");
-      if (k == null) {
-        log("RandomCarSpawner yok");
-        return;
-      }
-      try {
-        const m = k.method("SpawnCar");
-        if (on)
-          m.implementation = function() {
-          };
-        else
-          m.revert();
-      } catch (e) {
-        log(`SpawnCar hook hatas\u0131: ${e.message ?? e}`);
-      }
+      toggleStub("RandomCarSpawner", ["SpawnCar"], on);
       eachInstance("RandomCarSpawner", (o) => {
         o.field("canSpawn").value = !on;
       });
       state.noTraffic = on;
-      log(`trafik ${on ? "KAPALI" : "a\xE7\u0131k"}`);
+      status(`trafik ${on ? "KAPALI" : "a\xE7\u0131k"}`);
     });
   }
-  var SPEED_MULT = 3;
-  function applySuperSpeed() {
-    eachInstance("CarMover", (o) => {
-      if (o.field("isAI").value)
-        return;
-      const maxSpeed = o.field("maxSpeed");
-      const accel = o.field("maxAcceleration");
-      const base = maxSpeed.value;
-      if (base > 0 && base < 400) {
-        maxSpeed.value = base * SPEED_MULT;
-        accel.value = accel.value * 2;
-      }
+  function setSlowTraffic(on) {
+    Il2Cpp.perform(() => {
+      eachInstance("RandomCarSpawner", (o) => {
+        const key = o.handle.toString();
+        const fMin = o.field("trafficMinSpeed");
+        const fMax = o.field("trafficMaxSpeed");
+        if (!originals.has(key) && !spawnerOriginals.has(key)) {
+          spawnerOriginals.set(key, {
+            min: fMin.value,
+            max: fMax.value
+          });
+        }
+        const orig = spawnerOriginals.get(key);
+        if (orig == null)
+          return;
+        fMin.value = on ? orig.min * 0.25 : orig.min;
+        fMax.value = on ? orig.max * 0.25 : orig.max;
+      });
+      state.slowTraffic = on;
+      status(`yava\u015F trafik ${on ? "A\xC7IK" : "kapal\u0131"}`);
     });
+  }
+  function applySpeedTo(o, on) {
+    if (o.field("isAI").value)
+      return;
+    const key = o.handle.toString();
+    const fMs = o.field("maxSpeed");
+    const fAcc = o.field("maxAcceleration");
+    if (!originals.has(key)) {
+      originals.set(key, {
+        ms: fMs.value,
+        acc: fAcc.value
+      });
+    }
+    const orig = originals.get(key);
+    if (orig == null)
+      return;
+    fMs.value = on ? orig.ms * state.speedMult : orig.ms;
+    fAcc.value = on ? orig.acc * 2 : orig.acc;
+  }
+  function installCarHook() {
+    if (carStartHook != null)
+      return;
+    const k = csClass("CarMover");
+    if (k == null)
+      return;
+    let m = null;
+    for (const name of ["myStart", "Start", "Awake"]) {
+      try {
+        m = k.method(name);
+        break;
+      } catch (e) {
+      }
+    }
+    if (m == null) {
+      log("CarMover ba\u015Flang\u0131\xE7 metodu yok");
+      return;
+    }
+    try {
+      carStartHook = Interceptor.attach(m.virtualAddress, {
+        onEnter(args) {
+          this.self = args[0];
+        },
+        onLeave() {
+          if (!state.superSpeed)
+            return;
+          try {
+            applySpeedTo(new Il2Cpp.Object(this.self), true);
+          } catch (e) {
+          }
+        }
+      });
+      log("CarMover hook kuruldu (olay tabanl\u0131, taramas\u0131z)");
+    } catch (e) {
+      log(`CarMover hook kurulamad\u0131: ${e.message ?? e}`);
+    }
   }
   function setSuperSpeed(on) {
     state.superSpeed = on;
-    if (speedTimer != null) {
-      clearInterval(speedTimer);
-      speedTimer = null;
-    }
-    if (on) {
-      speedTimer = setInterval(() => {
-        try {
-          Il2Cpp.perform(() => applySuperSpeed());
-        } catch (e) {
-        }
-      }, 1500);
-      Il2Cpp.perform(() => applySuperSpeed());
-    }
-    log(`s\xFCper h\u0131z ${on ? "A\xC7IK" : "kapal\u0131"}`);
+    Il2Cpp.perform(() => {
+      installCarHook();
+      eachInstance("CarMover", (o) => applySpeedTo(o, on));
+    });
+    status(`s\xFCper h\u0131z ${on ? `A\xC7IK \xD7${state.speedMult}` : "kapal\u0131"}`);
   }
-  var onOff = (b) => b ? "A\xC7IK" : "kapal\u0131";
-  var ITEMS = [
-    { label: () => "Para +1.000.000", run: () => addMoney(1e6) },
-    { label: () => "Para +100.000", run: () => addMoney(1e5) },
+  function cycleSpeedMult() {
+    state.speedMult = state.speedMult >= 5 ? 2 : state.speedMult + 1;
+    if (state.superSpeed) {
+      Il2Cpp.perform(() => eachInstance("CarMover", (o) => applySpeedTo(o, true)));
+    }
+    status(`h\u0131z \xE7arpan\u0131 \xD7${state.speedMult}`);
+  }
+  function instantMaxSpeed() {
+    Il2Cpp.perform(() => {
+      eachInstance("CarMover", (o) => {
+        if (o.field("isAI").value)
+          return;
+        const max = o.method("getMaxSpeed").invoke();
+        o.method("setSpeed").invoke(max);
+      });
+      status("an\u0131nda maksimum h\u0131z");
+    });
+  }
+  var ROWS = [
+    { kind: "head", text: "PARA & K\u0130L\u0130TLER" },
+    { kind: "item", label: () => "Para  +1.000.000", run: () => addMoney(1e6) },
+    { kind: "item", label: () => "Para  +100.000", run: () => addMoney(1e5) },
+    { kind: "item", label: () => "T\xFCm arabalar\u0131 a\xE7", run: () => unlockAllCars() },
+    { kind: "item", label: () => "Y\xFCkseltmeleri maksla", run: () => maxUpgrades() },
+    { kind: "item", label: () => "Reklams\u0131z + \xE7ift para + haritalar", run: () => unlockExtras() },
+    { kind: "item", label: () => "Skorlar\u0131 maksla", run: () => maxScores() },
+    { kind: "head", text: "YARI\u015E" },
     {
-      label: () => `\xC7arp\u0131\u015Fma yok  \xB7  ${onOff(state.noCollision)}`,
-      run: () => setNoCollision(!state.noCollision)
+      kind: "item",
+      label: () => "\xC7arp\u0131\u015Fma yok",
+      run: () => setNoCollision(!state.noCollision),
+      active: () => state.noCollision
     },
     {
-      label: () => `Trafik yok  \xB7  ${onOff(state.noTraffic)}`,
-      run: () => setNoTraffic(!state.noTraffic)
+      kind: "item",
+      label: () => "Trafik yok",
+      run: () => setNoTraffic(!state.noTraffic),
+      active: () => state.noTraffic
     },
     {
-      label: () => `S\xFCper h\u0131z (sadece ben)  \xB7  ${onOff(state.superSpeed)}`,
-      run: () => setSuperSpeed(!state.superSpeed)
+      kind: "item",
+      label: () => "Yava\u015F trafik",
+      run: () => setSlowTraffic(!state.slowTraffic),
+      active: () => state.slowTraffic
     },
-    { label: () => "T\xFCm arabalar\u0131 a\xE7", run: () => unlockAllCars() },
-    { label: () => "Y\xFCkseltmeleri maksla", run: () => maxUpgrades() },
-    { label: () => "Reklams\u0131z + \xE7ift para + haritalar", run: () => unlockExtras() },
-    { label: () => "Oyun h\u0131z\u0131 \xD72  (her \u015Fey)", run: () => setTimeScale(2) },
-    { label: () => "Oyun h\u0131z\u0131 \xD71  (normal)", run: () => setTimeScale(1) },
-    { label: () => "API d\xF6k\xFCm\xFC \xE7\u0131kar", run: () => dumpApi() }
+    {
+      kind: "item",
+      label: () => "Yol s\u0131n\u0131r\u0131 yok",
+      run: () => setNoBoundary(!state.noBoundary),
+      active: () => state.noBoundary
+    },
+    { kind: "head", text: "HIZ  (sadece senin araban)" },
+    {
+      kind: "item",
+      label: () => `S\xFCper h\u0131z  \xD7${state.speedMult}`,
+      run: () => setSuperSpeed(!state.superSpeed),
+      active: () => state.superSpeed
+    },
+    {
+      kind: "item",
+      label: () => `\xC7arpan\u0131 de\u011Fi\u015Ftir  (\u015Fu an \xD7${state.speedMult})`,
+      run: () => cycleSpeedMult()
+    },
+    { kind: "item", label: () => "An\u0131nda maksimum h\u0131z", run: () => instantMaxSpeed() },
+    { kind: "head", text: "D\u0130\u011EER" },
+    { kind: "item", label: () => "Oyun h\u0131z\u0131 \xD72  (her \u015Fey)", run: () => setTimeScale(2) },
+    { kind: "item", label: () => "Oyun h\u0131z\u0131 \xD71  (normal)", run: () => setTimeScale(1) },
+    { kind: "item", label: () => "API d\xF6k\xFCm\xFC \xE7\u0131kar", run: () => dumpApi() }
   ];
   var menuBuilt = false;
   function jstr(s) {
@@ -17188,6 +17311,17 @@ std_string_c_str (StdString * self)
   function argb(a, r, g, b) {
     return a << 24 | r << 16 | g << 8 | b | 0;
   }
+  var COL = {
+    panel: argb(245, 16, 17, 22),
+    head: argb(255, 122, 132, 158),
+    title: argb(255, 108, 214, 255),
+    itemBg: argb(255, 34, 36, 46),
+    itemOnBg: argb(255, 24, 104, 72),
+    itemTx: argb(255, 232, 235, 242),
+    itemOnTx: argb(255, 178, 255, 220),
+    status: argb(255, 150, 156, 172),
+    toggleBg: argb(235, 198, 44, 66)
+  };
   function buildMenu(activity) {
     const LinearLayout = Java.use("android.widget.LinearLayout");
     const ScrollView = Java.use("android.widget.ScrollView");
@@ -17198,15 +17332,10 @@ std_string_c_str (StdString * self)
     const GradientDrawable = Java.use("android.graphics.drawable.GradientDrawable");
     const Gravity = Java.use("android.view.Gravity");
     const Typeface = Java.use("android.graphics.Typeface");
-    const WRAP = -2;
-    const MATCH = -1;
-    const VERTICAL = 1;
-    const GONE = 8;
-    const VISIBLE = 0;
+    const WRAP = -2, MATCH = -1, VERTICAL = 1, GONE = 8, VISIBLE = 0;
     const density = activity.getResources().getDisplayMetrics().density.value;
     const dp = (v) => Math.round(v * density);
-    const SP = 2;
-    const sp = (view, size) => view.setTextSize.overload("int", "float").call(view, SP, size);
+    const sp = (view, size) => view.setTextSize.overload("int", "float").call(view, 2, size);
     const rounded = (view, color, radiusDp) => {
       const g = GradientDrawable.$new();
       g.setColor.overload("int").call(g, color);
@@ -17214,17 +17343,27 @@ std_string_c_str (StdString * self)
       view.setBackground(g);
     };
     let panel;
+    let statusView;
     const buttons = [];
-    const refreshLabels = () => {
-      ITEMS.forEach((item, i) => {
+    const refresh = () => {
+      ROWS.forEach((row, i) => {
+        if (row.kind !== "item")
+          return;
         const b = buttons[i];
-        if (b != null) {
-          try {
-            setText(b, item.label());
-          } catch (e) {
-          }
+        if (b == null)
+          return;
+        try {
+          setText(b, row.label());
+          const on = row.active != null && row.active();
+          rounded(b, on ? COL.itemOnBg : COL.itemBg, 9);
+          b.setTextColor(on ? COL.itemOnTx : COL.itemTx);
+        } catch (e) {
         }
       });
+      try {
+        setText(statusView, lastStatus);
+      } catch (e) {
+      }
     };
     const Click = Java.registerClass({
       name: "tr.mod.Click",
@@ -17237,13 +17376,15 @@ std_string_c_str (StdString * self)
             if (i === -1) {
               const vis = panel.getVisibility();
               panel.setVisibility(vis === VISIBLE ? GONE : VISIBLE);
-            } else {
-              ITEMS[i].run();
-              refreshLabels();
+              return;
             }
+            const row = ROWS[i];
+            if (row != null && row.kind === "item")
+              row.run();
           } catch (e) {
-            log(`t\u0131klama hatas\u0131 (${i}): ${e.message ?? e}`);
+            status(`hata: ${e.message ?? e}`);
           }
+          refresh();
         }
       }
     });
@@ -17254,41 +17395,55 @@ std_string_c_str (StdString * self)
     };
     panel = LinearLayout.$new(activity);
     panel.setOrientation(VERTICAL);
-    panel.setPadding(dp(12), dp(12), dp(12), dp(12));
-    rounded(panel, argb(242, 18, 18, 24), 14);
+    panel.setPadding(dp(12), dp(10), dp(12), dp(12));
+    rounded(panel, COL.panel, 14);
     panel.setVisibility(GONE);
     const title = TextView.$new(activity);
     setText(title, "TRAFFIC RACER  \xB7  MOD");
-    title.setTextColor(argb(255, 110, 215, 255));
+    title.setTextColor(COL.title);
     sp(title, 13);
     title.setTypeface(Typeface.DEFAULT_BOLD.value);
-    title.setPadding(dp(4), 0, 0, dp(10));
+    title.setPadding(dp(2), 0, 0, dp(8));
     panel.addView(title);
-    ITEMS.forEach((item, i) => {
+    ROWS.forEach((row, i) => {
       try {
+        if (row.kind === "head") {
+          const h = TextView.$new(activity);
+          setText(h, row.text);
+          h.setTextColor(COL.head);
+          sp(h, 10);
+          h.setTypeface(Typeface.DEFAULT_BOLD.value);
+          h.setPadding(dp(2), dp(10), 0, dp(4));
+          panel.addView(h);
+          return;
+        }
         const b = Button.$new(activity);
-        setText(b, item.label());
+        setText(b, row.label());
         b.setAllCaps(false);
-        sp(b, 13);
-        b.setTextColor(argb(255, 238, 240, 245));
+        sp(b, 12.5);
+        b.setTextColor(COL.itemTx);
         b.setGravity(Gravity.CENTER_VERTICAL.value | Gravity.LEFT.value);
-        b.setPadding(dp(14), 0, dp(14), 0);
-        b.setMinimumHeight(dp(42));
-        rounded(b, argb(255, 38, 40, 52), 9);
+        b.setPadding(dp(12), 0, dp(12), 0);
+        rounded(b, COL.itemBg, 9);
         b.setOnClickListener(mkClick(i));
-        const lp = LinearParams.$new(MATCH, dp(42));
+        const lp = LinearParams.$new(MATCH, dp(40));
         lp.setMargins(0, dp(3), 0, dp(3));
         b.setLayoutParams(lp);
         panel.addView(b);
         buttons[i] = b;
       } catch (e) {
-        log(`d\xFC\u011Fme eklenemedi (${i}): ${e.message ?? e}`);
+        log(`sat\u0131r eklenemedi (${i}): ${e.message ?? e}`);
       }
     });
+    statusView = TextView.$new(activity);
+    setText(statusView, lastStatus);
+    statusView.setTextColor(COL.status);
+    sp(statusView, 10.5);
+    statusView.setPadding(dp(2), dp(10), 0, 0);
+    panel.addView(statusView);
     const scroll = ScrollView.$new(activity);
     scroll.addView(panel);
-    const scrollLp = LinearParams.$new(dp(240), WRAP);
-    scroll.setLayoutParams(scrollLp);
+    scroll.setLayoutParams(LinearParams.$new(dp(250), dp(360)));
     const toggle = Button.$new(activity);
     setText(toggle, "MOD");
     toggle.setAllCaps(false);
@@ -17296,13 +17451,11 @@ std_string_c_str (StdString * self)
     toggle.setTextColor(argb(255, 255, 255, 255));
     toggle.setTypeface(Typeface.DEFAULT_BOLD.value);
     toggle.setPadding(0, 0, 0, 0);
-    toggle.setMinimumWidth(dp(58));
-    toggle.setMinimumHeight(dp(34));
-    rounded(toggle, argb(230, 200, 45, 65), 17);
+    rounded(toggle, COL.toggleBg, 17);
     toggle.setOnClickListener(mkClick(-1));
-    const toggleLp = LinearParams.$new(dp(58), dp(34));
-    toggleLp.setMargins(0, 0, 0, dp(6));
-    toggle.setLayoutParams(toggleLp);
+    const tLp = LinearParams.$new(dp(60), dp(34));
+    tLp.setMargins(0, 0, 0, dp(6));
+    toggle.setLayoutParams(tLp);
     const wrapper = LinearLayout.$new(activity);
     wrapper.setOrientation(VERTICAL);
     wrapper.addView(toggle);
@@ -17310,8 +17463,9 @@ std_string_c_str (StdString * self)
     const params = FrameLayoutParams.$new(WRAP, WRAP);
     params.gravity.value = Gravity.TOP.value | Gravity.LEFT.value;
     params.leftMargin.value = dp(10);
-    params.topMargin.value = dp(40);
+    params.topMargin.value = dp(36);
     activity.addContentView(wrapper, params);
+    refresh();
     log(`men\xFC eklendi (yo\u011Funluk ${density})`);
   }
   function main() {
