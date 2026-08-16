@@ -7,10 +7,28 @@ source "$(dirname "$0")/lib.sh"
 need_device
 
 APK="${1:-}"
-if [ -z "$APK" ]; then
-  APK="$(ls -1 "$OUT_DIR"/*-debuggable.apk 2>/dev/null | head -1)"
+
+if [ -n "$APK" ] && [ ! -f "$APK" ]; then
+  warn "Böyle bir dosya yok: $APK"
+  if ls -1 "$OUT_DIR"/*.apk >/dev/null 2>&1; then
+    info "out/ içinde bulunanlar:"
+    ls -1 "$OUT_DIR"/*.apk | sed 's|.*/|    |'
+  else
+    warn "out/ klasöründe hiç APK yok — üretim adımı tamamlanmamış."
+  fi
+  die "Menülü sürüm için önce:  ./tr.sh menu
+     Sade (menüsüz) sürüm için: ./tr.sh patch"
 fi
-[ -n "$APK" ] && [ -f "$APK" ] || die "Kurulacak APK yok. Önce: ./tools/02-patch.sh"
+
+if [ -z "$APK" ]; then
+  # Argüman verilmediyse: önce menülü sürüm, yoksa sade sürüm.
+  APK="$(ls -1 "$OUT_DIR"/*-menu.apk 2>/dev/null | head -1)"
+  [ -n "$APK" ] || APK="$(ls -1 "$OUT_DIR"/*-debuggable.apk 2>/dev/null | head -1)"
+fi
+
+[ -n "$APK" ] && [ -f "$APK" ] || die "Kurulacak APK yok.
+     Menülü sürüm için:  ./tr.sh menu
+     Sade sürüm için:    ./tr.sh patch"
 
 info "Kurulacak: $APK"
 
