@@ -239,6 +239,19 @@ patch_manifest() {
     ok 'android:debuggable="true" eklendi'
   fi
 
+  # Gadget ayar dosyasi (libfrida-gadget.config.so) DISKTE aranir. extractNativeLibs
+  # kapaliysa native dosyalar APK icinden okunur, diske acilmaz; gadget ayari bulamayip
+  # "listen" moduna duser ve uygulamayi acilista kilitler.
+  if grep -q 'android:extractNativeLibs="true"' "$m"; then
+    ok "extractNativeLibs zaten true"
+  elif grep -q 'android:extractNativeLibs=' "$m"; then
+    sed 's|android:extractNativeLibs="false"|android:extractNativeLibs="true"|' "$m" > "$tmp" && mv "$tmp" "$m"
+    ok "extractNativeLibs true yapıldı"
+  else
+    sed 's|<application|<application android:extractNativeLibs="true"|' "$m" > "$tmp" && mv "$tmp" "$m"
+    ok 'extractNativeLibs="true" eklendi'
+  fi
+
   if grep -q 'android:allowBackup="true"' "$m"; then
     ok "allowBackup zaten true"
   elif grep -q 'android:allowBackup=' "$m"; then

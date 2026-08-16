@@ -2,6 +2,7 @@
 # Menü ajanını telefona gönderir ve çıktılarını geri alır.
 #
 #   ./tr.sh agent          ajanı gönder (gadget dosyayı görünce kendini yeniler)
+#   ./tr.sh agent status   teşhis: gadget açılmış mı, ajan yerinde mi, logcat
 #   ./tr.sh agent log      telefondaki mod.log'u göster
 #   ./tr.sh agent classes  oyunun sınıf listesini çek -> work/classes.txt
 #   ./tr.sh agent dump     tam dökümü çek -> work/dump.cs
@@ -31,6 +32,53 @@ case "$CMD" in
     echo
     info "Oyunu (yeniden) aç — sol üstte kırmızı 'MOD' düğmesi çıkacak."
     info "Sorun olursa:  ./tr.sh agent log"
+    ;;
+
+  status)
+    info "Paket: $PKG"
+    ok "run-as çalışıyor"
+
+    # 1. Gadget diske açılmış mı? (extractNativeLibs kapalıysa açılmaz ve
+    #    gadget ayar dosyasını bulamayıp 'listen' moduna düşer -> oyun kilitlenir)
+    NLD="$(adb shell dumpsys package "$PKG" 2>/dev/null | tr -d '\r' \
+           | sed -n 's/.*nativeLibraryPath=\([^ ]*\).*/\1/p;s/.*legacyNativeLibraryDir=\([^ ]*\).*/\1/p' \
+           | head -1 || true)"
+    echo
+    if [ -n "$NLD" ]; then
+      info "Native kütüphane klasörü: $NLD"
+      LIBS="$(adb shell ls "$NLD"/arm64 "$NLD" 2>/dev/null | tr -d '\r' | grep -i frida || true)"
+      if [ -n "$LIBS" ]; then
+        ok "gadget diske açılmış:"
+        printf '%s\n' "$LIBS" | sed 's/^/    /'
+        printf '%s\n' "$LIBS" | grep -q 'config' \
+          && ok "ayar dosyası da var (script modu çalışır)" \
+          || warn "AYAR DOSYASI YOK -> gadget 'listen' moduna düşer ve oyunu kilitler."
+      else
+        warn "gadget diske AÇILMAMIŞ -> extractNativeLibs kapalı demektir."
+        warn "Çözüm: ./tr.sh menu (düzeltilmiş sürüm) + ./tr.sh install"
+      fi
+    else
+      warn "Native kütüphane klasörü okunamadı."
+    fi
+
+    # 2. Ajan dosyası
+    echo
+    AG="$(adb shell "run-as $PKG ls -la files/agent.js" 2>/dev/null | tr -d '\r' || true)"
+    if [ -n "$AG" ] && ! printf '%s' "$AG" | grep -qi 'no such'; then
+      ok "ajan yerinde: $AG"
+    else
+      warn "files/agent.js YOK -> önce: ./tr.sh agent"
+    fi
+
+    # 3. Gadget'ın kendi günlüğü
+    echo
+    info "logcat'te frida/gadget izleri (son 20 satır):"
+    adb logcat -d 2>/dev/null | grep -iE 'frida|gadget' | tail -20 | sed 's/^/    /' \
+      || warn "iz yok"
+    echo
+    info "Oyun çökmüşse:"
+    adb logcat -d 2>/dev/null | grep -iE 'FATAL|AndroidRuntime|trafficracer' | tail -15 | sed 's/^/    /' \
+      || warn "çökme kaydı yok"
     ;;
 
   log)
@@ -65,6 +113,6 @@ case "$CMD" in
     ;;
 
   *)
-    die "Bilinmeyen komut: $CMD  (push | log | classes | dump)"
+    die "Bilinmeyen komut: $CMD  (push | status | log | classes | dump)"
     ;;
 esac

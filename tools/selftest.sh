@@ -38,7 +38,7 @@ M="$TMPD/a.xml"
 cat > "$M" <<'XML'
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.skgames.trafficracer">
-    <application android:allowBackup="false" android:label="Traffic Racer" android:icon="@mipmap/app_icon">
+    <application android:allowBackup="false" android:extractNativeLibs="false" android:label="Traffic Racer" android:icon="@mipmap/app_icon">
         <activity android:name="com.unity3d.player.UnityPlayerActivity" android:exported="true"/>
     </application>
 </manifest>
@@ -47,6 +47,8 @@ patch_manifest "$M" >/dev/null
 check "debuggable eklendi"                1 "$(grep -c 'android:debuggable="true"' "$M")"
 check "allowBackup false -> true"         1 "$(grep -c 'android:allowBackup="true"' "$M")"
 check "allowBackup=\"false\" kalmadı"     0 "$(grep -c 'android:allowBackup="false"' "$M")"
+check "extractNativeLibs false kalmadı"   0 "$(grep -c 'android:extractNativeLibs="false"' "$M")"
+check "extractNativeLibs true"            1 "$(grep -c 'android:extractNativeLibs="true"' "$M")"
 check "</application> bozulmadı"          1 "$(grep -c '</application>' "$M")"
 check "activity satırı değişmedi"         1 "$(grep -c 'UnityPlayerActivity' "$M")"
 
@@ -63,6 +65,7 @@ cat > "$M2" <<'XML'
 XML
 patch_manifest "$M2" >/dev/null
 check "allowBackup yoksa eklenir"         1 "$(grep -c 'android:allowBackup="true"' "$M2")"
+check "extractNativeLibs yoksa eklenir"   1 "$(grep -c 'android:extractNativeLibs="true"' "$M2")"
 check "debuggable yoksa eklenir"          1 "$(grep -c 'android:debuggable="true"' "$M2")"
 
 # --- 2b. first_match: pipefail altında sessiz ölmemeli ----------------------
