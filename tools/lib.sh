@@ -87,6 +87,53 @@ b64_oneline() {
   base64 < "$1" | tr -d '\n'
 }
 
+# Uygulamanın özel veri klasörüne dosya yazar (root'suz, run-as üzerinden).
+# Önce hızlı yol: adb push -> uygulamanın kendi harici klasörü -> run-as cp.
+# Olmazsa yavaş ama her yerde çalışan base64 parçalı aktarım.
+#   push_app_file <yerel-dosya> <veri-dizinine-göreli-hedef>
+push_app_file() {
+  local src="$1" rel="$2"
+  [ -s "$src" ] || die "Gönderilecek dosya boş: $src"
+
+  local dir; dir="$(dirname "$rel")"
+  [ "$dir" = "." ] || adb shell "run-as $PKG mkdir -p '$dir'" >/dev/null 2>&1 || true
+
+  local ext="/sdcard/Android/data/$PKG/files"
+  adb shell "mkdir -p '$ext'" >/dev/null 2>&1 || true
+  if ( cd "$(dirname "$src")" && MSYS_NO_PATHCONV=1 adb push "$(basename "$src")" "$ext/.push.tmp" ) >/dev/null 2>&1 \
+     && adb shell "run-as $PKG cp '$ext/.push.tmp' '$rel'" >/dev/null 2>&1; then
+    adb shell "rm -f '$ext/.push.tmp'" >/dev/null 2>&1 || true
+  else
+    warn "Hızlı aktarım olmadı, parçalı yola geçiliyor (daha yavaş)..."
+    local b64 len i=0 chunk
+    b64="$(b64_oneline "$src")"; len=${#b64}
+    adb shell "run-as $PKG sh -c 'rm -f .push.b64'" >/dev/null 2>&1 || true
+    while [ "$i" -lt "$len" ]; do
+      chunk="${b64:$i:1500}"
+      adb shell "run-as $PKG sh -c 'printf %s $chunk >> .push.b64'" >/dev/null \
+        || die "Aktarım başarısız."
+      i=$((i + 1500))
+    done
+    adb shell "run-as $PKG sh -c 'base64 -d < .push.b64 > \"$rel\" && rm -f .push.b64'" >/dev/null \
+      || die "Cihazda yazılamadı: $rel"
+  fi
+
+  # doğrula
+  local verify="$WORK_DIR/.pushverify"
+  mkdir -p "$WORK_DIR"
+  adb exec-out run-as "$PKG" cat "$rel" > "$verify" 2>/dev/null || die "Geri okunamadı: $rel"
+  if [ "$(file_sum "$verify")" != "$(file_sum "$src")" ]; then
+    rm -f "$verify"; die "Doğrulama başarısız: cihazdaki $rel farklı."
+  fi
+  rm -f "$verify"
+}
+
+# Uygulamanın veri klasöründen dosya çeker.
+pull_app_file() {  # pull_app_file <veri-dizinine-göreli-kaynak> <yerel-hedef>
+  adb exec-out run-as "$PKG" cat "$1" > "$2" 2>/dev/null || return 1
+  [ -s "$2" ] || return 1
+}
+
 # prefs_awk <mode> <anahtar> <deger> <dosya>   (mode: list | get | set)
 # Anahtar/değer ENVIRON ile geçilir: "awk -v" kaçış dizilerini yorumlar, ENVIRON yorumlamaz —
 # yani "\1" gibi değerler birebir literal yazılır.

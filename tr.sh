@@ -9,7 +9,9 @@
 #   ./tr.sh all       yukarıdaki dördü sırayla
 #   ./tr.sh prefs [list|guess|get K|set K V|add K N|savekeys ..|loadkeys F|backup]
 #   ./tr.sh info      motor tespiti (Mono / IL2CPP)
-#   ./tr.sh dump      IL2CPP dokumu (mod menusu icin sinif/adres listesi)
+#   ./tr.sh dump      IL2CPP dokumu (PC tarafinda, opsiyonel)
+#   ./tr.sh menu      oyun ici MOD MENUSUNU APK'ya enjekte et (bir kez)
+#   ./tr.sh agent     menu ajanini telefona gonder (log|classes|dump)
 #   ./tr.sh test      cihazsız kendi kendine test
 
 cd "$(dirname "$0")" || exit 1
@@ -24,6 +26,8 @@ case "$CMD" in
   prefs)   exec ./tools/04-prefs.sh "${@:-list}" ;;
   info)    exec ./tools/05-engine-info.sh "$@" ;;
   dump)    exec ./tools/06-dump.sh "$@" ;;
+  menu)    exec ./tools/07-menu.sh "$@" ;;
+  agent)   exec ./tools/08-agent.sh "$@" ;;
   test)    exec ./tools/selftest.sh "$@" ;;
   all)
     ./tools/00-fetch-tools.sh && \
@@ -37,7 +41,7 @@ case "$CMD" in
     ;;
   *)
     echo "Bilinmeyen komut: $CMD" >&2
-    echo "Kullanılabilir: tools pull patch install all prefs info dump test" >&2
+    echo "Kullanılabilir: tools pull patch install all prefs info dump menu agent test" >&2
     exit 1
     ;;
 esac

@@ -1,0 +1,20 @@
+{
+  "name": "menu",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "frida-il2cpp-bridge": "^0.13.1",
+    "frida-java-bridge": "^7.0.13"
+  },
+  "devDependencies": {
+    "@types/frida-gum": "^19.10.0",
+    "frida-compile": "^19.0.5"
+  }
+}

@@ -9,7 +9,13 @@ out/
 *.xapk
 *.dex
 *.so
+
+# istisna: frida-gadget paketi repoda dursun (indirilmesi ve xz acilmasi zor)
+!menu/vendor/libfrida-gadget.zip
 *.idsig
 
 # Kayıt dosyası yedekleri (kişisel veri)
 prefs-backup-*.xml
+
+# node modulleri (ajan zaten derlenmis halde dist/ icinde)
+menu/node_modules/
