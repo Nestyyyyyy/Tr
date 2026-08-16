@@ -2399,9 +2399,9 @@
         if (Il2Cpp3.unityVersionIsBelow202120) {
           const onWorld = new NativeCallback(() => {
           }, "void", []);
-          const state = Il2Cpp3.exports.livenessCalculationBegin(klass, 0, chooseCallback, NULL, onWorld, onWorld);
-          Il2Cpp3.exports.livenessCalculationFromStatics(state);
-          Il2Cpp3.exports.livenessCalculationEnd(state);
+          const state2 = Il2Cpp3.exports.livenessCalculationBegin(klass, 0, chooseCallback, NULL, onWorld, onWorld);
+          Il2Cpp3.exports.livenessCalculationFromStatics(state2);
+          Il2Cpp3.exports.livenessCalculationEnd(state2);
         } else {
           const realloc = (handle, size) => {
             if (!handle.isNull() && size.compare(0) == 0) {
@@ -2413,11 +2413,11 @@
           };
           const reallocCallback = new NativeCallback(realloc, "pointer", ["pointer", "size_t", "pointer"]);
           this.stopWorld();
-          const state = Il2Cpp3.exports.livenessAllocateStruct(klass, 0, chooseCallback, NULL, reallocCallback);
-          Il2Cpp3.exports.livenessCalculationFromStatics(state);
-          Il2Cpp3.exports.livenessFinalize(state);
+          const state2 = Il2Cpp3.exports.livenessAllocateStruct(klass, 0, chooseCallback, NULL, reallocCallback);
+          Il2Cpp3.exports.livenessCalculationFromStatics(state2);
+          Il2Cpp3.exports.livenessFinalize(state2);
           this.startWorld();
-          Il2Cpp3.exports.livenessFreeStruct(state);
+          Il2Cpp3.exports.livenessFreeStruct(state2);
         }
         return matches;
       },
@@ -3085,35 +3085,35 @@ ${this.#state.buffer.join("\n")}
     }
     Il2Cpp3.Tracer = Tracer;
     function trace(parameters = false) {
-      const applier = () => (method, state, threadId) => {
+      const applier = () => (method, state2, threadId) => {
         const paddedVirtualAddress = method.relativeVirtualAddress.toString(16).padStart(8, "0");
         Interceptor.attach(method.virtualAddress, {
           onEnter() {
             if (this.threadId == threadId) {
-              state.buffer.push(`\x1B[2m0x${paddedVirtualAddress}\x1B[0m ${`\u2502 `.repeat(state.depth++)}\u250C\u2500\x1B[35m${method.class.type.name}::\x1B[1m${method.name}\x1B[0m\x1B[0m`);
+              state2.buffer.push(`\x1B[2m0x${paddedVirtualAddress}\x1B[0m ${`\u2502 `.repeat(state2.depth++)}\u250C\u2500\x1B[35m${method.class.type.name}::\x1B[1m${method.name}\x1B[0m\x1B[0m`);
             }
           },
           onLeave() {
             if (this.threadId == threadId) {
-              state.buffer.push(`\x1B[2m0x${paddedVirtualAddress}\x1B[0m ${`\u2502 `.repeat(--state.depth)}\u2514\u2500\x1B[33m${method.class.type.name}::\x1B[1m${method.name}\x1B[0m\x1B[0m`);
-              state.flush();
+              state2.buffer.push(`\x1B[2m0x${paddedVirtualAddress}\x1B[0m ${`\u2502 `.repeat(--state2.depth)}\u2514\u2500\x1B[33m${method.class.type.name}::\x1B[1m${method.name}\x1B[0m\x1B[0m`);
+              state2.flush();
             }
           }
         });
       };
-      const applierWithParameters = () => (method, state, threadId) => {
+      const applierWithParameters = () => (method, state2, threadId) => {
         const paddedVirtualAddress = method.relativeVirtualAddress.toString(16).padStart(8, "0");
         const startIndex = +!method.isStatic | +Il2Cpp3.unityVersionIsBelow201830;
         const callback = function(...args) {
           if (this.threadId == threadId) {
             const thisParameter = method.isStatic ? void 0 : new Il2Cpp3.Parameter("this", -1, method.class.type);
             const parameters2 = thisParameter ? [thisParameter].concat(method.parameters) : method.parameters;
-            state.buffer.push(`\x1B[2m0x${paddedVirtualAddress}\x1B[0m ${`\u2502 `.repeat(state.depth++)}\u250C\u2500\x1B[35m${method.class.type.name}::\x1B[1m${method.name}\x1B[0m\x1B[0m(${parameters2.map((e) => `\x1B[32m${e.name}\x1B[0m = \x1B[31m${Il2Cpp3.fromFridaValue(args[e.position + startIndex], e.type)}\x1B[0m`).join(", ")})`);
+            state2.buffer.push(`\x1B[2m0x${paddedVirtualAddress}\x1B[0m ${`\u2502 `.repeat(state2.depth++)}\u250C\u2500\x1B[35m${method.class.type.name}::\x1B[1m${method.name}\x1B[0m\x1B[0m(${parameters2.map((e) => `\x1B[32m${e.name}\x1B[0m = \x1B[31m${Il2Cpp3.fromFridaValue(args[e.position + startIndex], e.type)}\x1B[0m`).join(", ")})`);
           }
           const returnValue = method.nativeFunction(...args);
           if (this.threadId == threadId) {
-            state.buffer.push(`\x1B[2m0x${paddedVirtualAddress}\x1B[0m ${`\u2502 `.repeat(--state.depth)}\u2514\u2500\x1B[33m${method.class.type.name}::\x1B[1m${method.name}\x1B[0m\x1B[0m${returnValue == void 0 ? "" : ` = \x1B[36m${Il2Cpp3.fromFridaValue(returnValue, method.returnType)}`}\x1B[0m`);
-            state.flush();
+            state2.buffer.push(`\x1B[2m0x${paddedVirtualAddress}\x1B[0m ${`\u2502 `.repeat(--state2.depth)}\u2514\u2500\x1B[33m${method.class.type.name}::\x1B[1m${method.name}\x1B[0m\x1B[0m${returnValue == void 0 ? "" : ` = \x1B[36m${Il2Cpp3.fromFridaValue(returnValue, method.returnType)}`}\x1B[0m`);
+            state2.flush();
           }
           return returnValue;
         };
@@ -3142,7 +3142,7 @@ ${this.#state.buffer.join("\n")}
         }
         return methods[right];
       };
-      const applier = () => (method, state, threadId) => {
+      const applier = () => (method, state2, threadId) => {
         Interceptor.attach(method.virtualAddress, function() {
           if (this.threadId == threadId) {
             const handles = globalThis.Thread.backtrace(this.context, mode);
@@ -3153,12 +3153,12 @@ ${this.#state.buffer.join("\n")}
                 if (method2) {
                   const offset = handle.sub(method2.virtualAddress);
                   if (offset.compare(4095) < 0) {
-                    state.buffer.push(`\x1B[2m0x${method2.relativeVirtualAddress.toString(16).padStart(8, "0")}\x1B[0m\x1B[2m+0x${offset.toString(16).padStart(3, `0`)}\x1B[0m ${method2.class.type.name}::\x1B[1m${method2.name}\x1B[0m`);
+                    state2.buffer.push(`\x1B[2m0x${method2.relativeVirtualAddress.toString(16).padStart(8, "0")}\x1B[0m\x1B[2m+0x${offset.toString(16).padStart(3, `0`)}\x1B[0m ${method2.class.type.name}::\x1B[1m${method2.name}\x1B[0m`);
                   }
                 }
               }
             }
-            state.flush();
+            state2.flush();
           }
         });
       };
@@ -9539,12 +9539,12 @@ std_string_get_data (StdString * str)
       this._clientFd = clientPair[0];
       let acceptListener = null;
       acceptListener = Interceptor.attach(acceptImpl, function(args) {
-        const state = args[0];
-        const controlSockPtr = Memory.scanSync(state.add(8252), 256, "00 ff ff ff ff 00")[0].address.add(1);
+        const state2 = args[0];
+        const controlSockPtr = Memory.scanSync(state2.add(8252), 256, "00 ff ff ff ff 00")[0].address.add(1);
         controlSockPtr.writeS32(controlPair[1]);
         acceptListener.detach();
       });
-      Interceptor.replace(receiveClientFdImpl, new NativeCallback(function(state) {
+      Interceptor.replace(receiveClientFdImpl, new NativeCallback(function(state2) {
         Interceptor.revert(receiveClientFdImpl);
         return clientPair[1];
       }, "int", ["pointer"]));
@@ -16938,15 +16938,245 @@ std_string_c_str (StdString * self)
       log(`api.txt yaz\u0131ld\u0131 (${out.length} sat\u0131r)`);
     });
   }
+  var state = {
+    noCollision: false,
+    noTraffic: false,
+    superSpeed: false
+  };
+  var speedTimer = null;
+  function csClass(name) {
+    for (const asmName of ["Assembly-CSharp", "Assembly-CSharp-firstpass"]) {
+      try {
+        const k = Il2Cpp.domain.assembly(asmName).image.tryClass(name);
+        if (k != null)
+          return k;
+      } catch (e) {
+      }
+    }
+    return findClass(name);
+  }
+  function eachInstance(className, cb) {
+    const k = csClass(className);
+    if (k == null) {
+      log(`${className} bulunamad\u0131`);
+      return 0;
+    }
+    let n = 0;
+    for (const obj of Il2Cpp.gc.choose(k)) {
+      try {
+        cb(obj);
+        n++;
+      } catch (e) {
+        log(`${className} \xF6rne\u011Fi atland\u0131: ${e.message ?? e}`);
+      }
+    }
+    return n;
+  }
+  function getMoney() {
+    const sec = csClass("SecureSaveGameManager");
+    if (sec == null)
+      return -1;
+    return sec.method("getTotalMoneyNew").invoke();
+  }
+  function setMoney(amount) {
+    const sec = csClass("SecureSaveGameManager");
+    const old = csClass("SaveGameManager");
+    if (sec == null || old == null) {
+      log("kay\u0131t y\xF6neticisi bulunamad\u0131");
+      return;
+    }
+    old.method("saveTotalMoney").invoke(amount, true);
+    sec.method("saveTotalMoneyNew").invoke(amount, true);
+    log(`para -> ${amount}`);
+  }
+  function addMoney(delta) {
+    Il2Cpp.perform(() => {
+      const cur = getMoney();
+      const next = (cur < 0 ? 0 : cur) + delta;
+      setMoney(next > 2e9 ? 2e9 : next);
+    });
+  }
+  function unlockAllCars() {
+    Il2Cpp.perform(() => {
+      const sec = csClass("SecureSaveGameManager");
+      const old = csClass("SaveGameManager");
+      if (sec == null || old == null)
+        return;
+      let n = 0;
+      for (let id = 0; id < 60; id++) {
+        try {
+          sec.method("saveAvailableForCarNew").invoke(id, true, true);
+          old.method("saveAvailableForCar").invoke(id, true, true);
+          n++;
+        } catch (e) {
+        }
+      }
+      log(`${n} araba a\xE7\u0131ld\u0131`);
+    });
+  }
+  function maxUpgrades() {
+    Il2Cpp.perform(() => {
+      const old = csClass("SaveGameManager");
+      if (old == null)
+        return;
+      const LEVEL = 6;
+      for (let id = 0; id < 60; id++) {
+        try {
+          old.method("saveSpeedLevelForCar").invoke(id, LEVEL);
+          old.method("saveHandlingLevelForCar").invoke(id, LEVEL);
+          old.method("saveBrakingLevelForCar").invoke(id, LEVEL);
+          for (let c = 0; c < 8; c++)
+            old.method("saveColorAvailableForCar").invoke(c, id, true);
+          for (let w = 0; w < 8; w++)
+            old.method("saveWheelAvailableForCar").invoke(w, id, true);
+          for (let v = 0; v < 8; v++)
+            old.method("saveVinylAvailableForCar").invoke(v, id, true);
+        } catch (e) {
+        }
+      }
+      log("y\xFCkseltmeler ve g\xF6rsel kilitler maksimuma \xE7ekildi");
+    });
+  }
+  function unlockExtras() {
+    Il2Cpp.perform(() => {
+      const sec = csClass("SecureSaveGameManager");
+      const old = csClass("SaveGameManager");
+      if (sec == null || old == null)
+        return;
+      const secFlags = [
+        "saveHasRemoveAds",
+        "saveHasDoubleCash",
+        "saveHasStarterKit",
+        "saveLocation3AvailableNew",
+        "saveLocation4AvailableNew",
+        "saveLocationRainyAvailable",
+        "saveLocationAutumnAvailable",
+        "saveLocationForestAvailable",
+        "saveLocationDesertAvailable"
+      ];
+      for (const m of secFlags) {
+        try {
+          sec.method(m).invoke(true, true);
+        } catch (e) {
+        }
+      }
+      const oldFlags = [
+        "saveLocationSnowyAvailable",
+        "saveLocationCityAvailable",
+        "saveLocationRainyAvailable",
+        "saveLocationAutumnAvailable",
+        "saveLocationForestAvailable",
+        "saveLocationDesertAvailable"
+      ];
+      for (const m of oldFlags) {
+        try {
+          old.method(m).invoke(true, true);
+        } catch (e) {
+        }
+      }
+      log("reklams\u0131z + \xE7ift para + t\xFCm lokasyonlar a\xE7\u0131ld\u0131");
+    });
+  }
+  function setNoCollision(on) {
+    Il2Cpp.perform(() => {
+      const k = csClass("CarCollisionDetector");
+      if (k == null) {
+        log("CarCollisionDetector yok");
+        return;
+      }
+      for (const name of ["OnTriggerEnter", "OnTriggerStay"]) {
+        try {
+          const m = k.method(name);
+          if (on)
+            m.implementation = function() {
+            };
+          else
+            m.revert();
+        } catch (e) {
+          log(`${name} hook hatas\u0131: ${e.message ?? e}`);
+        }
+      }
+      state.noCollision = on;
+      log(`\xE7arp\u0131\u015Fma ${on ? "KAPALI" : "a\xE7\u0131k"}`);
+    });
+  }
+  function setNoTraffic(on) {
+    Il2Cpp.perform(() => {
+      const k = csClass("RandomCarSpawner");
+      if (k == null) {
+        log("RandomCarSpawner yok");
+        return;
+      }
+      try {
+        const m = k.method("SpawnCar");
+        if (on)
+          m.implementation = function() {
+          };
+        else
+          m.revert();
+      } catch (e) {
+        log(`SpawnCar hook hatas\u0131: ${e.message ?? e}`);
+      }
+      eachInstance("RandomCarSpawner", (o) => {
+        o.field("canSpawn").value = !on;
+      });
+      state.noTraffic = on;
+      log(`trafik ${on ? "KAPALI" : "a\xE7\u0131k"}`);
+    });
+  }
+  var SPEED_MULT = 3;
+  function applySuperSpeed() {
+    eachInstance("CarMover", (o) => {
+      if (o.field("isAI").value)
+        return;
+      const maxSpeed = o.field("maxSpeed");
+      const accel = o.field("maxAcceleration");
+      const base = maxSpeed.value;
+      if (base > 0 && base < 400) {
+        maxSpeed.value = base * SPEED_MULT;
+        accel.value = accel.value * 2;
+      }
+    });
+  }
+  function setSuperSpeed(on) {
+    state.superSpeed = on;
+    if (speedTimer != null) {
+      clearInterval(speedTimer);
+      speedTimer = null;
+    }
+    if (on) {
+      speedTimer = setInterval(() => {
+        try {
+          Il2Cpp.perform(() => applySuperSpeed());
+        } catch (e) {
+        }
+      }, 1500);
+      Il2Cpp.perform(() => applySuperSpeed());
+    }
+    log(`s\xFCper h\u0131z ${on ? "A\xC7IK" : "kapal\u0131"}`);
+  }
+  var onOff = (b) => b ? "A\xC7IK" : "kapal\u0131";
   var ITEMS = [
-    // NOT: timeScale TUM oyunu etkiler (trafik dahil). Sadece kendi arabani
-    // hizlandirmak icin CarMover hook'u gerekiyor; api.txt gelince eklenecek.
-    { label: "Oyun h\u0131z\u0131  \xD71  (normal)", run: () => setTimeScale(1) },
-    { label: "Oyun h\u0131z\u0131  \xD72", run: () => setTimeScale(2) },
-    { label: "Oyun h\u0131z\u0131  \xD74", run: () => setTimeScale(4) },
-    { label: "A\u011F\u0131r \xE7ekim  \xD70.5", run: () => setTimeScale(0.5) },
-    { label: "API d\xF6k\xFCm\xFC \xE7\u0131kar", run: () => dumpApi() },
-    { label: "S\u0131n\u0131f listesi \xE7\u0131kar", run: () => dumpClassNames() }
+    { label: () => "Para +1.000.000", run: () => addMoney(1e6) },
+    { label: () => "Para +100.000", run: () => addMoney(1e5) },
+    {
+      label: () => `\xC7arp\u0131\u015Fma yok  \xB7  ${onOff(state.noCollision)}`,
+      run: () => setNoCollision(!state.noCollision)
+    },
+    {
+      label: () => `Trafik yok  \xB7  ${onOff(state.noTraffic)}`,
+      run: () => setNoTraffic(!state.noTraffic)
+    },
+    {
+      label: () => `S\xFCper h\u0131z (sadece ben)  \xB7  ${onOff(state.superSpeed)}`,
+      run: () => setSuperSpeed(!state.superSpeed)
+    },
+    { label: () => "T\xFCm arabalar\u0131 a\xE7", run: () => unlockAllCars() },
+    { label: () => "Y\xFCkseltmeleri maksla", run: () => maxUpgrades() },
+    { label: () => "Reklams\u0131z + \xE7ift para + haritalar", run: () => unlockExtras() },
+    { label: () => "Oyun h\u0131z\u0131 \xD72  (her \u015Fey)", run: () => setTimeScale(2) },
+    { label: () => "Oyun h\u0131z\u0131 \xD71  (normal)", run: () => setTimeScale(1) },
+    { label: () => "API d\xF6k\xFCm\xFC \xE7\u0131kar", run: () => dumpApi() }
   ];
   var menuBuilt = false;
   function jstr(s) {
@@ -16984,6 +17214,18 @@ std_string_c_str (StdString * self)
       view.setBackground(g);
     };
     let panel;
+    const buttons = [];
+    const refreshLabels = () => {
+      ITEMS.forEach((item, i) => {
+        const b = buttons[i];
+        if (b != null) {
+          try {
+            setText(b, item.label());
+          } catch (e) {
+          }
+        }
+      });
+    };
     const Click = Java.registerClass({
       name: "tr.mod.Click",
       implements: [Java.use("android.view.View$OnClickListener")],
@@ -16997,6 +17239,7 @@ std_string_c_str (StdString * self)
               panel.setVisibility(vis === VISIBLE ? GONE : VISIBLE);
             } else {
               ITEMS[i].run();
+              refreshLabels();
             }
           } catch (e) {
             log(`t\u0131klama hatas\u0131 (${i}): ${e.message ?? e}`);
@@ -17024,7 +17267,7 @@ std_string_c_str (StdString * self)
     ITEMS.forEach((item, i) => {
       try {
         const b = Button.$new(activity);
-        setText(b, item.label);
+        setText(b, item.label());
         b.setAllCaps(false);
         sp(b, 13);
         b.setTextColor(argb(255, 238, 240, 245));
@@ -17037,8 +17280,9 @@ std_string_c_str (StdString * self)
         lp.setMargins(0, dp(3), 0, dp(3));
         b.setLayoutParams(lp);
         panel.addView(b);
+        buttons[i] = b;
       } catch (e) {
-        log(`d\xFC\u011Fme eklenemedi (${item.label}): ${e.message ?? e}`);
+        log(`d\xFC\u011Fme eklenemedi (${i}): ${e.message ?? e}`);
       }
     });
     const scroll = ScrollView.$new(activity);

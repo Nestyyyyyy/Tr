@@ -127,21 +127,224 @@ function dumpApi(): void {
     });
 }
 
+// ------------------------------------------------------------ hileler -------
+/*
+ * api.txt'den cikan gercekler:
+ *   SaveGameManager.saveTotalMoney(int, bool)            -> TOTAL_MONEY
+ *   SecureSaveGameManager.saveTotalMoneyNew(int, bool)   -> TOTAL_MONEY_NEW
+ * Oyun ikisini karsilastiriyor; sadece birini yazarsan parayi 0'a cekiyor.
+ * Oyunun kendi kaydetme fonksiyonunu cagirdigimiz icin sifrelemeyle
+ * ugrasmiyoruz - onu kendisi yapiyor.
+ *
+ *   CarMover.isAI  -> oyuncunun arabasini trafikten ayirir (kritik)
+ *   RandomCarSpawner.SpawnCar / canSpawn  -> trafik
+ *   CarCollisionDetector.OnTriggerEnter/Stay -> carpisma
+ */
+
+const state = {
+    noCollision: false,
+    noTraffic: false,
+    superSpeed: false,
+};
+
+let speedTimer: any = null;
+
+function csClass(name: string): Il2Cpp.Class | null {
+    for (const asmName of ["Assembly-CSharp", "Assembly-CSharp-firstpass"]) {
+        try {
+            const k = Il2Cpp.domain.assembly(asmName).image.tryClass(name);
+            if (k != null) return k;
+        } catch (e) { /* yok */ }
+    }
+    return findClass(name);
+}
+
+/** Canli nesneler arasindan sinifa uyanlari gezer. */
+function eachInstance(className: string, cb: (o: Il2Cpp.Object) => void): number {
+    const k = csClass(className);
+    if (k == null) { log(`${className} bulunamadı`); return 0; }
+    let n = 0;
+    for (const obj of Il2Cpp.gc.choose(k)) {
+        try { cb(obj); n++; } catch (e: any) { log(`${className} örneği atlandı: ${e.message ?? e}`); }
+    }
+    return n;
+}
+
+// ------------------------------------------------------------------ para ----
+function getMoney(): number {
+    const sec = csClass("SecureSaveGameManager");
+    if (sec == null) return -1;
+    return sec.method<number>("getTotalMoneyNew").invoke() as unknown as number;
+}
+
+function setMoney(amount: number): void {
+    const sec = csClass("SecureSaveGameManager");
+    const old = csClass("SaveGameManager");
+    if (sec == null || old == null) { log("kayıt yöneticisi bulunamadı"); return; }
+    // IKISI BIRDEN yazilmali; yoksa oyun uyusmazlik gorup parayi sifirliyor.
+    old.method("saveTotalMoney").invoke(amount, true);
+    sec.method("saveTotalMoneyNew").invoke(amount, true);
+    log(`para -> ${amount}`);
+}
+
+function addMoney(delta: number): void {
+    Il2Cpp.perform(() => {
+        const cur = getMoney();
+        const next = (cur < 0 ? 0 : cur) + delta;
+        setMoney(next > 2000000000 ? 2000000000 : next);
+    });
+}
+
+// -------------------------------------------------------------- kilitler ----
+function unlockAllCars(): void {
+    Il2Cpp.perform(() => {
+        const sec = csClass("SecureSaveGameManager");
+        const old = csClass("SaveGameManager");
+        if (sec == null || old == null) return;
+        let n = 0;
+        for (let id = 0; id < 60; id++) {
+            try {
+                sec.method("saveAvailableForCarNew").invoke(id, true, true);
+                old.method("saveAvailableForCar").invoke(id, true, true);
+                n++;
+            } catch (e) { /* o id yok */ }
+        }
+        log(`${n} araba açıldı`);
+    });
+}
+
+function maxUpgrades(): void {
+    Il2Cpp.perform(() => {
+        const old = csClass("SaveGameManager");
+        if (old == null) return;
+        const LEVEL = 6;
+        for (let id = 0; id < 60; id++) {
+            try {
+                old.method("saveSpeedLevelForCar").invoke(id, LEVEL);
+                old.method("saveHandlingLevelForCar").invoke(id, LEVEL);
+                old.method("saveBrakingLevelForCar").invoke(id, LEVEL);
+                for (let c = 0; c < 8; c++) old.method("saveColorAvailableForCar").invoke(c, id, true);
+                for (let w = 0; w < 8; w++) old.method("saveWheelAvailableForCar").invoke(w, id, true);
+                for (let v = 0; v < 8; v++) old.method("saveVinylAvailableForCar").invoke(v, id, true);
+            } catch (e) { /* yok */ }
+        }
+        log("yükseltmeler ve görsel kilitler maksimuma çekildi");
+    });
+}
+
+function unlockExtras(): void {
+    Il2Cpp.perform(() => {
+        const sec = csClass("SecureSaveGameManager");
+        const old = csClass("SaveGameManager");
+        if (sec == null || old == null) return;
+        const secFlags = ["saveHasRemoveAds", "saveHasDoubleCash", "saveHasStarterKit",
+                          "saveLocation3AvailableNew", "saveLocation4AvailableNew",
+                          "saveLocationRainyAvailable", "saveLocationAutumnAvailable",
+                          "saveLocationForestAvailable", "saveLocationDesertAvailable"];
+        for (const m of secFlags) {
+            try { sec.method(m).invoke(true, true); } catch (e) { /* imza farkli */ }
+        }
+        const oldFlags = ["saveLocationSnowyAvailable", "saveLocationCityAvailable",
+                          "saveLocationRainyAvailable", "saveLocationAutumnAvailable",
+                          "saveLocationForestAvailable", "saveLocationDesertAvailable"];
+        for (const m of oldFlags) {
+            try { old.method(m).invoke(true, true); } catch (e) { /* yok */ }
+        }
+        log("reklamsız + çift para + tüm lokasyonlar açıldı");
+    });
+}
+
+// ------------------------------------------------------------ çarpışma ------
+function setNoCollision(on: boolean): void {
+    Il2Cpp.perform(() => {
+        const k = csClass("CarCollisionDetector");
+        if (k == null) { log("CarCollisionDetector yok"); return; }
+        for (const name of ["OnTriggerEnter", "OnTriggerStay"]) {
+            try {
+                const m = k.method(name);
+                if (on) m.implementation = function () { /* çarpışmayı yut */ };
+                else m.revert();
+            } catch (e: any) {
+                log(`${name} hook hatası: ${e.message ?? e}`);
+            }
+        }
+        state.noCollision = on;
+        log(`çarpışma ${on ? "KAPALI" : "açık"}`);
+    });
+}
+
+// --------------------------------------------------------------- trafik -----
+function setNoTraffic(on: boolean): void {
+    Il2Cpp.perform(() => {
+        const k = csClass("RandomCarSpawner");
+        if (k == null) { log("RandomCarSpawner yok"); return; }
+        try {
+            const m = k.method("SpawnCar");
+            if (on) m.implementation = function () { /* araç doğurma */ };
+            else m.revert();
+        } catch (e: any) {
+            log(`SpawnCar hook hatası: ${e.message ?? e}`);
+        }
+        // Mevcut spawner'lari da kapat/ac.
+        eachInstance("RandomCarSpawner", o => { o.field<boolean>("canSpawn").value = !on; });
+        state.noTraffic = on;
+        log(`trafik ${on ? "KAPALI" : "açık"}`);
+    });
+}
+
+// ----------------------------------------------------------- süper hız ------
+const SPEED_MULT = 3.0;
+
+/** Sadece OYUNCUNUN arabasi: isAI == false. Trafik etkilenmiyor. */
+function applySuperSpeed(): void {
+    eachInstance("CarMover", o => {
+        if (o.field<boolean>("isAI").value) return;
+        const maxSpeed = o.field<number>("maxSpeed");
+        const accel = o.field<number>("maxAcceleration");
+        const base = maxSpeed.value as unknown as number;
+        if (base > 0 && base < 400) {
+            maxSpeed.value = base * SPEED_MULT;
+            accel.value = (accel.value as unknown as number) * 2;
+        }
+    });
+}
+
+function setSuperSpeed(on: boolean): void {
+    state.superSpeed = on;
+    if (speedTimer != null) { clearInterval(speedTimer); speedTimer = null; }
+    if (on) {
+        // Araba her yarista yeniden olusuyor; periyodik olarak tekrar uygula.
+        speedTimer = setInterval(() => {
+            try { Il2Cpp.perform(() => applySuperSpeed()); } catch (e) { /* yarış dışı */ }
+        }, 1500);
+        Il2Cpp.perform(() => applySuperSpeed());
+    }
+    log(`süper hız ${on ? "AÇIK" : "kapalı"}`);
+}
+
 // ------------------------------------------------------------- menü ---------
 interface MenuItem {
-    label: string;
+    label: () => string;
     run: () => void;
 }
 
+const onOff = (b: boolean) => (b ? "AÇIK" : "kapalı");
+
 const ITEMS: MenuItem[] = [
-    // NOT: timeScale TUM oyunu etkiler (trafik dahil). Sadece kendi arabani
-    // hizlandirmak icin CarMover hook'u gerekiyor; api.txt gelince eklenecek.
-    { label: "Oyun hızı  ×1  (normal)", run: () => setTimeScale(1.0) },
-    { label: "Oyun hızı  ×2", run: () => setTimeScale(2.0) },
-    { label: "Oyun hızı  ×4", run: () => setTimeScale(4.0) },
-    { label: "Ağır çekim  ×0.5", run: () => setTimeScale(0.5) },
-    { label: "API dökümü çıkar", run: () => dumpApi() },
-    { label: "Sınıf listesi çıkar", run: () => dumpClassNames() },
+    { label: () => "Para +1.000.000", run: () => addMoney(1000000) },
+    { label: () => "Para +100.000", run: () => addMoney(100000) },
+    { label: () => `Çarpışma yok  ·  ${onOff(state.noCollision)}`,
+      run: () => setNoCollision(!state.noCollision) },
+    { label: () => `Trafik yok  ·  ${onOff(state.noTraffic)}`,
+      run: () => setNoTraffic(!state.noTraffic) },
+    { label: () => `Süper hız (sadece ben)  ·  ${onOff(state.superSpeed)}`,
+      run: () => setSuperSpeed(!state.superSpeed) },
+    { label: () => "Tüm arabaları aç", run: () => unlockAllCars() },
+    { label: () => "Yükseltmeleri maksla", run: () => maxUpgrades() },
+    { label: () => "Reklamsız + çift para + haritalar", run: () => unlockExtras() },
+    { label: () => "Oyun hızı ×2  (her şey)", run: () => setTimeScale(2.0) },
+    { label: () => "Oyun hızı ×1  (normal)", run: () => setTimeScale(1.0) },
+    { label: () => "API dökümü çıkar", run: () => dumpApi() },
 ];
 
 let menuBuilt = false;
@@ -201,6 +404,17 @@ function buildMenu(activity: any): void {
     };
 
     let panel: any;
+    const buttons: any[] = [];
+
+    /** Toggle'dan sonra etiketler ACIK/kapali'yi yansitsin. */
+    const refreshLabels = () => {
+        ITEMS.forEach((item, i) => {
+            const b = buttons[i];
+            if (b != null) {
+                try { setText(b, item.label()); } catch (e) { /* onemsiz */ }
+            }
+        });
+    };
 
     const Click = Java.registerClass({
         name: "tr.mod.Click",
@@ -215,6 +429,7 @@ function buildMenu(activity: any): void {
                         panel.setVisibility(vis === VISIBLE ? GONE : VISIBLE);
                     } else {
                         ITEMS[i].run();
+                        refreshLabels();
                     }
                 } catch (e: any) {
                     log(`tıklama hatası (${i}): ${e.message ?? e}`);
@@ -247,7 +462,7 @@ function buildMenu(activity: any): void {
     ITEMS.forEach((item, i) => {
         try {
             const b = Button.$new(activity);
-            setText(b, item.label);
+            setText(b, item.label());
             b.setAllCaps(false);
             sp(b, 13);
             b.setTextColor(argb(255, 238, 240, 245));
@@ -261,8 +476,9 @@ function buildMenu(activity: any): void {
             lp.setMargins(0, dp(3), 0, dp(3));
             b.setLayoutParams(lp);
             panel.addView(b);
+            buttons[i] = b;
         } catch (e: any) {
-            log(`düğme eklenemedi (${item.label}): ${e.message ?? e}`);
+            log(`düğme eklenemedi (${i}): ${e.message ?? e}`);
         }
     });
 
