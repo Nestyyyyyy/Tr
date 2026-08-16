@@ -7,7 +7,7 @@
 #   ./tr.sh patch     manifest yaması + imza
 #   ./tr.sh install   orijinali kaldır, yamalıyı kur
 #   ./tr.sh all       yukarıdaki dördü sırayla
-#   ./tr.sh prefs [list|add|guess|get K|set K V|pull|push|backup]
+#   ./tr.sh prefs [list|guess|get K|set K V|add K N|savekeys ..|loadkeys F|backup]
 #   ./tr.sh info      motor tespiti (Mono / IL2CPP)
 #   ./tr.sh test      cihazsız kendi kendine test
 

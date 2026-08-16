@@ -8,7 +8,9 @@
 #   ./tools/04-prefs.sh get <anahtar>
 #   ./tools/04-prefs.sh set <anahtar> <değer>
 #   ./tools/04-prefs.sh add <anahtar> <miktar>   # sayısal değere ekler (eksi de olur)
-#   ./tools/04-prefs.sh backup          # kayıt dosyasını out/ altına yedekle
+#   ./tools/04-prefs.sh savekeys <a1> [a2..]  # secili anahtarlari dosyaya kaydet
+#   ./tools/04-prefs.sh loadkeys <dosya>     # kaydedilenleri geri yaz
+#   ./tools/04-prefs.sh backup               # tum kayit dosyasini yedekle
 #   ./tools/04-prefs.sh pull [dosya]    # cihazdan çek
 #   ./tools/04-prefs.sh push [dosya]    # elle düzenlediğin dosyayı geri yaz
 
@@ -173,6 +175,47 @@ case "$CMD" in
     ok "Oyunu şimdi aç ve kontrol et."
     ;;
 
+  savekeys)
+    [ "$#" -ge 1 ] || die "Kullanım: $0 savekeys <anahtar> [anahtar...]"
+    pull_prefs
+    mkdir -p "$OUT_DIR"
+    F="$OUT_DIR/keys-$(date +%Y%m%d-%H%M%S).txt"
+    : > "$F"
+    for k in "$@"; do
+      v="$(prefs_awk get "$k" '' "$LOCAL")" || die "'$k' kayıt dosyasında yok."
+      printf '%s\t%s\n' "$k" "$v" >> "$F"
+      printf '    %s = %s\n' "$k" "$v"
+    done
+    ok "Kaydedildi: $F"
+    info "Geri yazmak için:  $0 loadkeys $F"
+    ;;
+
+  loadkeys)
+    F="${1:-}"
+    [ -n "$F" ] && [ -f "$F" ] || die "Kullanım: $0 loadkeys <dosya>  (savekeys'in ürettiği)"
+
+    adb shell am force-stop "$PKG" >/dev/null 2>&1 || true
+    pull_prefs
+
+    mkdir -p "$OUT_DIR"
+    BK="$OUT_DIR/prefs-backup-$(date +%Y%m%d-%H%M%S).xml"
+    cp "$LOCAL" "$BK"; ok "Yedek alındı: $BK"
+
+    n=0
+    while IFS="$(printf '\t')" read -r k v; do
+      [ -n "$k" ] || continue
+      prefs_awk set "$k" "$v" "$LOCAL" > "$LOCAL.new" \
+        || { rm -f "$LOCAL.new"; die "Yazılamadı: $k"; }
+      mv "$LOCAL.new" "$LOCAL"
+      printf '    %s = %s\n' "$k" "$v"
+      n=$((n + 1))
+    done < "$F"
+    [ "$n" -gt 0 ] || die "Dosyada anahtar yok: $F"
+
+    push_prefs "$LOCAL"
+    ok "$n anahtar geri yazıldı."
+    ;;
+
   pull)
     pull_prefs
     ok "Çekildi -> $LOCAL  (elle düzenleyip '$0 push' ile geri yaz)"
@@ -191,6 +234,6 @@ case "$CMD" in
     ;;
 
   *)
-    die "Bilinmeyen komut: $CMD  (list | guess | get | set | add | pull | push | backup)"
+    die "Bilinmeyen komut: $CMD  (list | guess | get | set | add | savekeys | loadkeys | pull | push | backup)"
     ;;
 esac
