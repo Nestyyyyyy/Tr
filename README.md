@@ -116,7 +116,6 @@ değeri değiştirir → geri yazar → cihazdaki dosyayı geri okuyup karşıla
 | `tools/03-install.sh` | Orijinali kaldırır (imza farklı, üzerine kurulmaz), yamalıyı kurar, `run-as` erişimini test eder |
 | `tools/04-prefs.sh` | Kayıt dosyasını `run-as` ile okur/yazar: `list`, `guess`, `get`, `set`, `pull`, `push`, `backup` |
 | `tools/05-engine-info.sh` | Plan B: APK Mono mu IL2CPP mi, hangi dosyaya bakılacak |
-
 | `tools/selftest.sh` | Cihaz/APK gerektirmeyen test: manifest yaması ve prefs düzenleyici mantığını doğrular |
 | `tr.sh` | Hepsinin tek giriş noktası (`make` olmayan Windows için) |
 | `windows/kurulum.ps1` | Windows'ta Git, JDK, Python ve adb kurar |
