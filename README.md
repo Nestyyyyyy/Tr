@@ -21,7 +21,7 @@ oyunun her sürümünde aynı şekilde çalışır.
 |---|---|
 | JDK 17+ | Windows: `windows\kurulum.ps1` · Linux: `sudo apt install openjdk-17-jdk` · macOS: `brew install openjdk@17` |
 | adb (platform-tools) | Windows: `windows\kurulum.ps1` · Linux: `sudo apt install android-tools-adb` · macOS: `brew install android-platform-tools` |
-| python3 | opsiyonel ama tavsiye edilir (kayıt dosyasını listeleme/düzenleme kolaylığı) |
+| Python 3 | herhangi bir 3.x sürümü (3.10 / 3.12 / 3.13 ile test edildi). Opsiyonel ama tavsiye edilir: kayıt dosyasını listeleme/düzenleme kolaylığı |
 | Telefon | USB hata ayıklama açık, USB ile bağlı, Traffic Racer **Play Store'dan kurulu** |
 
 > APK'yı ben indirmiyorum ve sen de üçüncü parti "mod apk" sitelerinden indirme.
@@ -212,6 +212,8 @@ make info    # Mono mu IL2CPP mi söyler
   çıktısı `zipalign verified` + `signature verified [v1, v2, v3]`.
 - Windows'un kullandığı kod yolları (unzip'siz Python fallback, `python`/`py` çözümü)
   Linux'ta simüle edilerek test edildi; Git Bash'in kendisinde çalıştırılmadı.
+- Test paketi Python 3.10, 3.12 ve 3.13 ile ayrı ayrı geçiyor; sürüme özgü bir şey
+  kullanılmıyor (yalnızca `re`, `sys`, `zipfile`).
 - `windows/kurulum.ps1` PowerShell gerektirdiği için burada çalıştırılamadı. Yaptığı iş
   winget çağrıları + bir zip indirmesi; başarısız olursa README'deki elle kurulum
   bağlantıları aynı sonucu verir.

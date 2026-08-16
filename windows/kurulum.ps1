@@ -25,20 +25,22 @@ function Have($name) {
     return $true
 }
 
-function Install-WithWinget($id, $label, $probe) {
+# $ids birden fazla winget paket adı alabilir; ilki tutmazsa sıradakini dener
+# (winget paket adları sürümle değişir, tek bir ada bağlanmak kırılgan).
+function Install-WithWinget($ids, $label, $probe) {
     if (Have $probe) { Good "$label zaten kurulu"; return }
     if (-not (Have 'winget')) {
         Note "$label yok, winget de yok. Elle kur (README'deki bağlantılar)."
         return
     }
-    Say "$label kuruluyor (winget)..."
-    winget install --id $id -e --source winget --accept-package-agreements --accept-source-agreements
-    if ($LASTEXITCODE -ne 0) {
-        Note "$label kurulumu winget ile başarısız (kod $LASTEXITCODE). Elle kurman gerekebilir."
-    } else {
-        Good "$label kuruldu"
+    foreach ($id in @($ids)) {
+        Say "$label kuruluyor (winget: $id)..."
+        winget install --id $id -e --source winget --accept-package-agreements --accept-source-agreements
+        Update-PathFromRegistry
+        if ($LASTEXITCODE -eq 0 -or (Have $probe)) { Good "$label kuruldu"; return }
+        Note "$id ile olmadi (kod $LASTEXITCODE), sonraki aday deneniyor..."
     }
-    Update-PathFromRegistry
+    Note "$label kurulamadi. Elle kurman gerekiyor (README'deki baglantilar)."
 }
 
 Say "Windows kurulum yardımcısı"
@@ -46,9 +48,10 @@ Write-Host ""
 
 Update-PathFromRegistry
 
-Install-WithWinget 'Git.Git'                        'Git for Windows (Git Bash)' 'git'
-Install-WithWinget 'EclipseAdoptium.Temurin.21.JDK' 'JDK 21'                     'java'
-Install-WithWinget 'Python.Python.3.12'             'Python 3'                   'python'
+Install-WithWinget 'Git.Git' 'Git for Windows (Git Bash)' 'git'
+Install-WithWinget @('EclipseAdoptium.Temurin.21.JDK', 'EclipseAdoptium.Temurin.17.JDK') 'JDK' 'java'
+# Herhangi bir Python 3.x yeter; kurulu olan varsa bu adım atlanır.
+Install-WithWinget @('Python.Python.3.13', 'Python.Python.3.12') 'Python 3' 'python'
 
 # --- adb: doğrudan Google'ın zip'inden, en güvenilir yol ---------------------
 $ptDir = Join-Path $env:LOCALAPPDATA 'Android\platform-tools'
