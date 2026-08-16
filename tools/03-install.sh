@@ -14,6 +14,16 @@ fi
 
 info "Kurulacak: $APK"
 
+# Yamalı sürüm zaten kuruluysa (ör. telefondan elle kurulduysa) hiçbir şeye dokunma.
+# run-as'ın çalışması, kurulu paketin debuggable olduğunun kesin kanıtı.
+if pkg_installed && adb shell run-as "$PKG" ls >/dev/null 2>&1; then
+  ok "Yamalı sürüm zaten kurulu ve run-as çalışıyor — kurulum adımı atlandı."
+  echo
+  info "Oyunu bir kez aç, birkaç saniye oyna ve ana menüye dön (kayıt dosyası böylece oluşur)."
+  info "Sonra: ./tr.sh prefs list"
+  exit 0
+fi
+
 if pkg_installed; then
   warn "'$PKG' kurulu. İmza farklı olduğu için kaldırılması şart."
   warn "Bu işlem mevcut para/skor/araç ilerlemeni SİLER."
@@ -29,11 +39,44 @@ fi
 
 info "Kuruluyor..."
 # Göreli yol: Git Bash'in yol dönüşümüne takılmasın.
-( cd "$(dirname "$APK")" && adb install -r "$(basename "$APK")" ) \
-  || die "Kurulum başarısız. (Telefonda 'USB ile kurulum' iznini onaylaman gerekebilir.)"
+# Çıktıyı dosyaya alıyoruz: "adb install" hata kodunu metinde veriyor, çıkış kodunda değil.
+INSTALL_LOG="$WORK_DIR/install.log"
+mkdir -p "$WORK_DIR"
+( cd "$(dirname "$APK")" && adb install -r "$(basename "$APK")" ) > "$INSTALL_LOG" 2>&1 || true
+sed 's/^/    /' "$INSTALL_LOG"
 
-pkg_installed || die "Kurulum sonrası paket görünmüyor."
-ok "Kuruldu."
+if grep -q 'Success' "$INSTALL_LOG"; then
+  ok "Kuruldu."
+else
+  echo
+  if grep -q 'INSTALL_FAILED_USER_RESTRICTED' "$INSTALL_LOG"; then
+    warn "Telefon USB üzerinden kurulumu engelliyor (INSTALL_FAILED_USER_RESTRICTED)."
+    warn "Xiaomi/Redmi/POCO'da yaygın. Geliştirici seçeneklerinde şunları aç:"
+    warn "  • USB üzerinden yükleme (Install via USB)"
+    warn "  • USB hata ayıklama (Güvenlik ayarları)"
+    warn "  • MIUI optimizasyonu -> KAPAT   (ilerideki run-as için de gerekli)"
+  else
+    warn "Kurulum adb ile yapılamadı. Ayrıntı: $INSTALL_LOG"
+  fi
+
+  # Kaçış yolu: APK'yı telefona kopyala, kullanıcı dosya yöneticisinden kursun.
+  # "USB üzerinden yükleme" kapalıyken bile bu yol çalışır.
+  echo
+  info "Alternatif yol deneniyor: APK telefona kopyalanıyor..."
+  if ( cd "$(dirname "$APK")" && MSYS_NO_PATHCONV=1 adb push "$(basename "$APK")" /sdcard/Download/trafficracer-mod.apk >/dev/null ); then
+    ok "Kopyalandı -> telefonda: İndirilenler / Download / trafficracer-mod.apk"
+    echo
+    info "Şimdi TELEFONDAN kur:"
+    info "  1. Dosyalar (Dosya Yöneticisi) uygulamasını aç"
+    info "  2. İndirilenler klasörü -> trafficracer-mod.apk -> dokun"
+    info "  3. 'Bilinmeyen kaynaklara izin ver' çıkarsa onayla, sonra Yükle"
+    info "  4. Kurulum bitince burada çalıştır:  ./tr.sh install"
+    echo
+    die "Kurulumu telefondan tamamla, sonra bu komutu tekrar çalıştır."
+  else
+    die "APK telefona kopyalanamadı da. Yukarıdaki izinleri açıp tekrar dene."
+  fi
+fi
 
 info "run-as erişimi kontrol ediliyor..."
 if adb shell run-as "$PKG" ls >/dev/null 2>&1; then
