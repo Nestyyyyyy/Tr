@@ -16874,13 +16874,6 @@ std_string_c_str (StdString * self)
       log(`timeScale = ${value}`);
     });
   }
-  function dumpClasses() {
-    Il2Cpp.perform(() => {
-      log("d\xF6k\xFCm ba\u015Fl\u0131yor, bu biraz s\xFCrebilir...");
-      Il2Cpp.dump("dump.cs", `/data/data/${PKG}/files`);
-      log(`d\xF6k\xFCm haz\u0131r: /data/data/${PKG}/files/dump.cs`);
-    });
-  }
   function dumpClassNames() {
     Il2Cpp.perform(() => {
       const out = [];
@@ -16900,13 +16893,60 @@ std_string_c_str (StdString * self)
       log(`${out.length} s\u0131n\u0131f yaz\u0131ld\u0131: files/classes.txt`);
     });
   }
+  var API_TARGETS = [
+    "CarMover",
+    "TrafficMover",
+    "RandomCarSpawner",
+    "CarCollisionDetector",
+    "SaveGameManager",
+    "SecureSaveGameManager",
+    "MenuCashAnimator",
+    "UpgradeSpeedButton",
+    "BuyButtonDoubleCash",
+    "MenuCarMover",
+    "MenuTrafficMover"
+  ];
+  function dumpApi() {
+    Il2Cpp.perform(() => {
+      const out = [];
+      for (const asm of Il2Cpp.domain.assemblies) {
+        if (!asm.name.startsWith("Assembly-CSharp"))
+          continue;
+        for (const klass of asm.image.classes) {
+          const name = klass.type.name;
+          if (!API_TARGETS.some((t) => name === t || name.indexOf(t + ".") === 0))
+            continue;
+          try {
+            out.push("=== " + name);
+            for (const f2 of klass.fields) {
+              out.push(`  ALAN  ${f2.isStatic ? "static " : ""}${f2.type.name} ${f2.name}`);
+            }
+            for (const m of klass.methods) {
+              const ps = m.parameters.map((x) => `${x.type.name} ${x.name}`).join(", ");
+              out.push(`  MET   ${m.isStatic ? "static " : ""}${m.returnType.name} ${m.name}(${ps})`);
+            }
+            out.push("");
+          } catch (e) {
+            out.push(`  (okunamad\u0131: ${e.message ?? e})`);
+          }
+        }
+      }
+      const f = new File(`/data/data/${PKG}/files/api.txt`, "w");
+      f.write(out.join("\n"));
+      f.flush();
+      f.close();
+      log(`api.txt yaz\u0131ld\u0131 (${out.length} sat\u0131r)`);
+    });
+  }
   var ITEMS = [
-    { label: "Oyun h\u0131z\u0131  1x", run: () => setTimeScale(1) },
-    { label: "Oyun h\u0131z\u0131  2x", run: () => setTimeScale(2) },
-    { label: "Oyun h\u0131z\u0131  4x", run: () => setTimeScale(4) },
-    { label: "Yava\u015F \xE7ekim 0.5x", run: () => setTimeScale(0.5) },
-    { label: "S\u0131n\u0131f listesi \xE7\u0131kar", run: () => dumpClassNames() },
-    { label: "Tam d\xF6k\xFCm (yava\u015F)", run: () => dumpClasses() }
+    // NOT: timeScale TUM oyunu etkiler (trafik dahil). Sadece kendi arabani
+    // hizlandirmak icin CarMover hook'u gerekiyor; api.txt gelince eklenecek.
+    { label: "Oyun h\u0131z\u0131  \xD71  (normal)", run: () => setTimeScale(1) },
+    { label: "Oyun h\u0131z\u0131  \xD72", run: () => setTimeScale(2) },
+    { label: "Oyun h\u0131z\u0131  \xD74", run: () => setTimeScale(4) },
+    { label: "A\u011F\u0131r \xE7ekim  \xD70.5", run: () => setTimeScale(0.5) },
+    { label: "API d\xF6k\xFCm\xFC \xE7\u0131kar", run: () => dumpApi() },
+    { label: "S\u0131n\u0131f listesi \xE7\u0131kar", run: () => dumpClassNames() }
   ];
   var menuBuilt = false;
   function jstr(s) {
@@ -16915,21 +16955,34 @@ std_string_c_str (StdString * self)
   function setText(view, s) {
     view.setText.overload("java.lang.CharSequence").call(view, jstr(s));
   }
-  function setTextSize(view, size) {
-    view.setTextSize.overload("float").call(view, size);
-  }
   function argb(a, r, g, b) {
     return a << 24 | r << 16 | g << 8 | b | 0;
   }
   function buildMenu(activity) {
     const LinearLayout = Java.use("android.widget.LinearLayout");
+    const ScrollView = Java.use("android.widget.ScrollView");
     const Button = Java.use("android.widget.Button");
     const TextView = Java.use("android.widget.TextView");
     const FrameLayoutParams = Java.use("android.widget.FrameLayout$LayoutParams");
     const LinearParams = Java.use("android.widget.LinearLayout$LayoutParams");
+    const GradientDrawable = Java.use("android.graphics.drawable.GradientDrawable");
     const Gravity = Java.use("android.view.Gravity");
+    const Typeface = Java.use("android.graphics.Typeface");
     const WRAP = -2;
     const MATCH = -1;
+    const VERTICAL = 1;
+    const GONE = 8;
+    const VISIBLE = 0;
+    const density = activity.getResources().getDisplayMetrics().density.value;
+    const dp = (v) => Math.round(v * density);
+    const SP = 2;
+    const sp = (view, size) => view.setTextSize.overload("int", "float").call(view, SP, size);
+    const rounded = (view, color, radiusDp) => {
+      const g = GradientDrawable.$new();
+      g.setColor.overload("int").call(g, color);
+      g.setCornerRadius(dp(radiusDp));
+      view.setBackground(g);
+    };
     let panel;
     const Click = Java.registerClass({
       name: "tr.mod.Click",
@@ -16941,7 +16994,7 @@ std_string_c_str (StdString * self)
           try {
             if (i === -1) {
               const vis = panel.getVisibility();
-              panel.setVisibility(vis === 0 ? 8 : 0);
+              panel.setVisibility(vis === VISIBLE ? GONE : VISIBLE);
             } else {
               ITEMS[i].run();
             }
@@ -16957,50 +17010,65 @@ std_string_c_str (StdString * self)
       return c;
     };
     panel = LinearLayout.$new(activity);
-    panel.setOrientation(1);
-    panel.setBackgroundColor(argb(220, 15, 15, 20));
-    panel.setPadding(16, 16, 16, 16);
-    panel.setVisibility(8);
+    panel.setOrientation(VERTICAL);
+    panel.setPadding(dp(12), dp(12), dp(12), dp(12));
+    rounded(panel, argb(242, 18, 18, 24), 14);
+    panel.setVisibility(GONE);
     const title = TextView.$new(activity);
-    setText(title, "TRAFFIC RACER - MOD");
-    title.setTextColor(argb(255, 120, 220, 255));
-    setTextSize(title, 14);
-    title.setPadding(0, 0, 0, 12);
+    setText(title, "TRAFFIC RACER  \xB7  MOD");
+    title.setTextColor(argb(255, 110, 215, 255));
+    sp(title, 13);
+    title.setTypeface(Typeface.DEFAULT_BOLD.value);
+    title.setPadding(dp(4), 0, 0, dp(10));
     panel.addView(title);
     ITEMS.forEach((item, i) => {
       try {
         const b = Button.$new(activity);
         setText(b, item.label);
         b.setAllCaps(false);
-        setTextSize(b, 13);
-        b.setTextColor(argb(255, 235, 235, 235));
-        b.setBackgroundColor(argb(255, 45, 45, 55));
+        sp(b, 13);
+        b.setTextColor(argb(255, 238, 240, 245));
+        b.setGravity(Gravity.CENTER_VERTICAL.value | Gravity.LEFT.value);
+        b.setPadding(dp(14), 0, dp(14), 0);
+        b.setMinimumHeight(dp(42));
+        rounded(b, argb(255, 38, 40, 52), 9);
         b.setOnClickListener(mkClick(i));
-        const lp = LinearParams.$new(MATCH, WRAP);
-        lp.setMargins(0, 4, 0, 4);
+        const lp = LinearParams.$new(MATCH, dp(42));
+        lp.setMargins(0, dp(3), 0, dp(3));
         b.setLayoutParams(lp);
         panel.addView(b);
       } catch (e) {
         log(`d\xFC\u011Fme eklenemedi (${item.label}): ${e.message ?? e}`);
       }
     });
+    const scroll = ScrollView.$new(activity);
+    scroll.addView(panel);
+    const scrollLp = LinearParams.$new(dp(240), WRAP);
+    scroll.setLayoutParams(scrollLp);
     const toggle = Button.$new(activity);
     setText(toggle, "MOD");
     toggle.setAllCaps(false);
-    setTextSize(toggle, 12);
+    sp(toggle, 12);
     toggle.setTextColor(argb(255, 255, 255, 255));
-    toggle.setBackgroundColor(argb(200, 200, 40, 60));
+    toggle.setTypeface(Typeface.DEFAULT_BOLD.value);
+    toggle.setPadding(0, 0, 0, 0);
+    toggle.setMinimumWidth(dp(58));
+    toggle.setMinimumHeight(dp(34));
+    rounded(toggle, argb(230, 200, 45, 65), 17);
     toggle.setOnClickListener(mkClick(-1));
+    const toggleLp = LinearParams.$new(dp(58), dp(34));
+    toggleLp.setMargins(0, 0, 0, dp(6));
+    toggle.setLayoutParams(toggleLp);
     const wrapper = LinearLayout.$new(activity);
-    wrapper.setOrientation(1);
+    wrapper.setOrientation(VERTICAL);
     wrapper.addView(toggle);
-    wrapper.addView(panel);
+    wrapper.addView(scroll);
     const params = FrameLayoutParams.$new(WRAP, WRAP);
     params.gravity.value = Gravity.TOP.value | Gravity.LEFT.value;
-    params.leftMargin.value = 24;
-    params.topMargin.value = 120;
+    params.leftMargin.value = dp(10);
+    params.topMargin.value = dp(40);
     activity.addContentView(wrapper, params);
-    log("men\xFC eklendi");
+    log(`men\xFC eklendi (yo\u011Funluk ${density})`);
   }
   function main() {
     log("ajan y\xFCklendi");
@@ -17027,8 +17095,9 @@ std_string_c_str (StdString * self)
       log(`il2cpp haz\u0131r \u2014 unity ${Il2Cpp.unityVersion}`);
       try {
         dumpClassNames();
+        dumpApi();
       } catch (e) {
-        log(`s\u0131n\u0131f listesi yaz\u0131lamad\u0131: ${e.message ?? e}`);
+        log(`d\xF6k\xFCm yaz\u0131lamad\u0131: ${e.message ?? e}`);
       }
     });
   }

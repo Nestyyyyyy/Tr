@@ -6,6 +6,7 @@
 #   ./tr.sh agent probe    bağımlılıksız teşhis sondası yükle (ajan hiç çalışmıyorsa)
 #   ./tr.sh agent log      telefondaki mod.log'u göster
 #   ./tr.sh agent classes  oyunun sınıf listesini çek -> work/classes.txt
+#   ./tr.sh agent api      hedef sınıfların alan/metot imzaları -> work/api.txt
 #   ./tr.sh agent dump     tam dökümü çek -> work/dump.cs
 #
 # APK'ya bir daha dokunulmuyor: gadget "on_change: reload" ile çalışıyor, yani
@@ -134,6 +135,17 @@ case "$CMD" in
     fi
     ;;
 
+  api)
+    if pull_app_file "files/api.txt" "$WORK_DIR/api.txt"; then
+      ok "Çekildi -> work/api.txt ($(du -h "$WORK_DIR/api.txt" | cut -f1))"
+      echo
+      info "İçerik:"
+      sed 's/^/    /' "$WORK_DIR/api.txt"
+    else
+      die "api.txt yok. Ajanı güncelleyip (./tr.sh agent) oyunu yeniden aç."
+    fi
+    ;;
+
   dump)
     if pull_app_file "files/dump.cs" "$WORK_DIR/dump.cs"; then
       ok "Çekildi -> work/dump.cs ($(du -h "$WORK_DIR/dump.cs" | cut -f1))"
@@ -143,6 +155,6 @@ case "$CMD" in
     ;;
 
   *)
-    die "Bilinmeyen komut: $CMD  (push | probe | status | log | classes | dump)"
+    die "Bilinmeyen komut: $CMD  (push | probe | status | log | classes | api | dump)"
     ;;
 esac
