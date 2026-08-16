@@ -16874,70 +16874,6 @@ std_string_c_str (StdString * self)
       log(`timeScale = ${value}`);
     });
   }
-  function dumpClassNames() {
-    Il2Cpp.perform(() => {
-      const out = [];
-      for (const asm of Il2Cpp.domain.assemblies) {
-        if (!asm.name.startsWith("Assembly-CSharp"))
-          continue;
-        for (const klass of asm.image.classes) {
-          const methods = klass.methods.map((m) => m.name).join(", ");
-          out.push(`${klass.type.name}
-    ${methods}`);
-        }
-      }
-      const f = new File(`/data/data/${PKG}/files/classes.txt`, "w");
-      f.write(out.join("\n"));
-      f.flush();
-      f.close();
-      log(`${out.length} s\u0131n\u0131f yaz\u0131ld\u0131: files/classes.txt`);
-    });
-  }
-  var API_TARGETS = [
-    "CarMover",
-    "TrafficMover",
-    "RandomCarSpawner",
-    "CarCollisionDetector",
-    "SaveGameManager",
-    "SecureSaveGameManager",
-    "MenuCashAnimator",
-    "UpgradeSpeedButton",
-    "BuyButtonDoubleCash",
-    "MenuCarMover",
-    "MenuTrafficMover"
-  ];
-  function dumpApi() {
-    Il2Cpp.perform(() => {
-      const out = [];
-      for (const asm of Il2Cpp.domain.assemblies) {
-        if (!asm.name.startsWith("Assembly-CSharp"))
-          continue;
-        for (const klass of asm.image.classes) {
-          const name = klass.type.name;
-          if (!API_TARGETS.some((t) => name === t || name.indexOf(t + ".") === 0))
-            continue;
-          try {
-            out.push("=== " + name);
-            for (const f2 of klass.fields) {
-              out.push(`  ALAN  ${f2.isStatic ? "static " : ""}${f2.type.name} ${f2.name}`);
-            }
-            for (const m of klass.methods) {
-              const ps = m.parameters.map((x) => `${x.type.name} ${x.name}`).join(", ");
-              out.push(`  MET   ${m.isStatic ? "static " : ""}${m.returnType.name} ${m.name}(${ps})`);
-            }
-            out.push("");
-          } catch (e) {
-            out.push(`  (okunamad\u0131: ${e.message ?? e})`);
-          }
-        }
-      }
-      const f = new File(`/data/data/${PKG}/files/api.txt`, "w");
-      f.write(out.join("\n"));
-      f.flush();
-      f.close();
-      log(`api.txt yaz\u0131ld\u0131 (${out.length} sat\u0131r)`);
-    });
-  }
   var state = {
     noCollision: false,
     noTraffic: false,
@@ -16947,9 +16883,14 @@ std_string_c_str (StdString * self)
     speedMult: 3
   };
   var lastStatus = "haz\u0131r";
-  var carStartHook = null;
+  var hooked = /* @__PURE__ */ new Set();
+  var refs = {};
   var originals = /* @__PURE__ */ new Map();
-  var spawnerOriginals = /* @__PURE__ */ new Map();
+  var spawnerOrig = /* @__PURE__ */ new Map();
+  function status(msg) {
+    lastStatus = msg;
+    log(msg);
+  }
   function csClass(name) {
     for (const asmName of ["Assembly-CSharp", "Assembly-CSharp-firstpass"]) {
       try {
@@ -16961,33 +16902,81 @@ std_string_c_str (StdString * self)
     }
     return findClass(name);
   }
-  function eachInstance(className, cb) {
-    const k = csClass(className);
-    if (k == null) {
-      log(`${className} bulunamad\u0131`);
-      return 0;
+  function refObj(key) {
+    const h = refs[key];
+    if (h == null || h.isNull())
+      return null;
+    try {
+      return new Il2Cpp.Object(h);
+    } catch (e) {
+      return null;
     }
-    let n = 0;
-    for (const obj of Il2Cpp.gc.choose(k)) {
+  }
+  function methodOf(o, name) {
+    let k = o.class;
+    while (k != null) {
       try {
-        cb(obj);
-        n++;
+        const m = k.tryMethod(name);
+        if (m != null)
+          return m;
       } catch (e) {
-        log(`${className} atland\u0131: ${e.message ?? e}`);
       }
+      k = k.parent;
     }
-    return n;
+    return null;
   }
-  function status(msg) {
-    lastStatus = msg;
-    log(msg);
+  function setComponentEnabled(o, on) {
+    try {
+      const m = methodOf(o, "set_enabled");
+      if (m == null)
+        return false;
+      o.method("set_enabled").invoke(on);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
-  function toggleStub(className, methods, on) {
+  function watchClass(className, candidates, onCreated) {
+    if (hooked.has(className))
+      return;
     const k = csClass(className);
     if (k == null) {
       log(`${className} yok`);
       return;
     }
+    for (const name of candidates) {
+      let m = null;
+      try {
+        m = k.method(name);
+      } catch (e) {
+        continue;
+      }
+      if (m == null)
+        continue;
+      try {
+        Interceptor.attach(m.virtualAddress, {
+          onEnter(args) {
+            this.self = args[0];
+          },
+          onLeave() {
+            try {
+              onCreated(new Il2Cpp.Object(this.self));
+            } catch (e) {
+            }
+          }
+        });
+        hooked.add(className);
+        log(`${className}.${name} dinleniyor`);
+        return;
+      } catch (e) {
+        log(`${className}.${name} hook hatas\u0131: ${e.message ?? e}`);
+      }
+    }
+  }
+  function stubCold(className, methods, on) {
+    const k = csClass(className);
+    if (k == null)
+      return;
     for (const name of methods) {
       try {
         const m = k.method(name);
@@ -17016,7 +17005,7 @@ std_string_c_str (StdString * self)
     }
     old.method("saveTotalMoney").invoke(amount, true);
     sec.method("saveTotalMoneyNew").invoke(amount, true);
-    status(`para: ${amount.toLocaleString("tr")}`);
+    status(`para: ${amount}`);
   }
   function addMoney(delta) {
     Il2Cpp.perform(() => {
@@ -17063,7 +17052,7 @@ std_string_c_str (StdString * self)
         } catch (e) {
         }
       }
-      status("y\xFCkseltmeler ve g\xF6rseller maksimum");
+      status("y\xFCkseltmeler maksimum");
     });
   }
   function unlockExtras() {
@@ -17088,14 +17077,7 @@ std_string_c_str (StdString * self)
         } catch (e) {
         }
       }
-      for (const m of [
-        "saveLocationSnowyAvailable",
-        "saveLocationCityAvailable",
-        "saveLocationRainyAvailable",
-        "saveLocationAutumnAvailable",
-        "saveLocationForestAvailable",
-        "saveLocationDesertAvailable"
-      ]) {
+      for (const m of ["saveLocationSnowyAvailable", "saveLocationCityAvailable"]) {
         try {
           old.method(m).invoke(true, true);
         } catch (e) {
@@ -17120,134 +17102,178 @@ std_string_c_str (StdString * self)
         } catch (e) {
         }
       }
-      status("skorlar maksimuma \xE7ekildi");
+      status("skorlar maksimum");
     });
+  }
+  function applyNoCollision(o) {
+    if (!setComponentEnabled(o, !state.noCollision)) {
+      stubCold("CarCollisionDetector", ["OnTriggerEnter"], state.noCollision);
+    }
   }
   function setNoCollision(on) {
+    state.noCollision = on;
     Il2Cpp.perform(() => {
-      toggleStub("CarCollisionDetector", ["OnTriggerEnter", "OnTriggerStay"], on);
-      state.noCollision = on;
-      status(`\xE7arp\u0131\u015Fma ${on ? "KAPALI" : "a\xE7\u0131k"}`);
+      const o = refObj("collision");
+      if (o != null)
+        applyNoCollision(o);
+      else
+        stubCold("CarCollisionDetector", ["OnTriggerEnter"], on);
     });
+    status(`\xE7arp\u0131\u015Fma ${on ? "KAPALI" : "a\xE7\u0131k"}`);
   }
   function setNoBoundary(on) {
-    Il2Cpp.perform(() => {
-      toggleStub("CarMover", ["checkBoundary", "hitBoundary"], on);
-      state.noBoundary = on;
-      status(`yol s\u0131n\u0131r\u0131 ${on ? "KAPALI" : "a\xE7\u0131k"}`);
-    });
+    state.noBoundary = on;
+    Il2Cpp.perform(() => stubCold("CarMover", ["hitBoundary"], on));
+    status(`yol s\u0131n\u0131r\u0131 ${on ? "KAPALI" : "a\xE7\u0131k"}`);
+  }
+  function applyNoTraffic(o) {
+    try {
+      o.field("canSpawn").value = !state.noTraffic;
+    } catch (e) {
+    }
   }
   function setNoTraffic(on) {
+    state.noTraffic = on;
     Il2Cpp.perform(() => {
-      toggleStub("RandomCarSpawner", ["SpawnCar"], on);
-      eachInstance("RandomCarSpawner", (o) => {
-        o.field("canSpawn").value = !on;
-      });
-      state.noTraffic = on;
-      status(`trafik ${on ? "KAPALI" : "a\xE7\u0131k"}`);
+      stubCold("RandomCarSpawner", ["SpawnCar"], on);
+      const o = refObj("spawner");
+      if (o != null)
+        applyNoTraffic(o);
     });
+    status(`trafik ${on ? "KAPALI" : "a\xE7\u0131k"}`);
+  }
+  function applySlowTraffic(o) {
+    try {
+      const key = o.handle.toString();
+      const fMin = o.field("trafficMinSpeed");
+      const fMax = o.field("trafficMaxSpeed");
+      if (!spawnerOrig.has(key)) {
+        spawnerOrig.set(key, {
+          min: fMin.value,
+          max: fMax.value
+        });
+      }
+      const orig = spawnerOrig.get(key);
+      if (orig == null)
+        return;
+      fMin.value = state.slowTraffic ? orig.min * 0.25 : orig.min;
+      fMax.value = state.slowTraffic ? orig.max * 0.25 : orig.max;
+    } catch (e) {
+    }
   }
   function setSlowTraffic(on) {
+    state.slowTraffic = on;
     Il2Cpp.perform(() => {
-      eachInstance("RandomCarSpawner", (o) => {
-        const key = o.handle.toString();
-        const fMin = o.field("trafficMinSpeed");
-        const fMax = o.field("trafficMaxSpeed");
-        if (!originals.has(key) && !spawnerOriginals.has(key)) {
-          spawnerOriginals.set(key, {
-            min: fMin.value,
-            max: fMax.value
-          });
-        }
-        const orig = spawnerOriginals.get(key);
-        if (orig == null)
-          return;
-        fMin.value = on ? orig.min * 0.25 : orig.min;
-        fMax.value = on ? orig.max * 0.25 : orig.max;
-      });
-      state.slowTraffic = on;
-      status(`yava\u015F trafik ${on ? "A\xC7IK" : "kapal\u0131"}`);
+      const o = refObj("spawner");
+      if (o != null)
+        applySlowTraffic(o);
     });
+    status(`yava\u015F trafik ${on ? "A\xC7IK" : "kapal\u0131"}`);
   }
-  function applySpeedTo(o, on) {
-    if (o.field("isAI").value)
-      return;
-    const key = o.handle.toString();
-    const fMs = o.field("maxSpeed");
-    const fAcc = o.field("maxAcceleration");
-    if (!originals.has(key)) {
-      originals.set(key, {
-        ms: fMs.value,
-        acc: fAcc.value
-      });
-    }
-    const orig = originals.get(key);
-    if (orig == null)
-      return;
-    fMs.value = on ? orig.ms * state.speedMult : orig.ms;
-    fAcc.value = on ? orig.acc * 2 : orig.acc;
-  }
-  function installCarHook() {
-    if (carStartHook != null)
-      return;
-    const k = csClass("CarMover");
-    if (k == null)
-      return;
-    let m = null;
-    for (const name of ["myStart", "Start", "Awake"]) {
-      try {
-        m = k.method(name);
-        break;
-      } catch (e) {
-      }
-    }
-    if (m == null) {
-      log("CarMover ba\u015Flang\u0131\xE7 metodu yok");
-      return;
-    }
+  function applySpeed(o) {
     try {
-      carStartHook = Interceptor.attach(m.virtualAddress, {
-        onEnter(args) {
-          this.self = args[0];
-        },
-        onLeave() {
-          if (!state.superSpeed)
-            return;
-          try {
-            applySpeedTo(new Il2Cpp.Object(this.self), true);
-          } catch (e) {
-          }
-        }
-      });
-      log("CarMover hook kuruldu (olay tabanl\u0131, taramas\u0131z)");
+      if (o.field("isAI").value)
+        return;
+      const key = o.handle.toString();
+      const fMs = o.field("maxSpeed");
+      const fAcc = o.field("maxAcceleration");
+      if (!originals.has(key)) {
+        originals.set(key, {
+          ms: fMs.value,
+          acc: fAcc.value
+        });
+      }
+      const orig = originals.get(key);
+      if (orig == null)
+        return;
+      fMs.value = state.superSpeed ? orig.ms * state.speedMult : orig.ms;
+      fAcc.value = state.superSpeed ? orig.acc * 2 : orig.acc;
     } catch (e) {
-      log(`CarMover hook kurulamad\u0131: ${e.message ?? e}`);
     }
   }
   function setSuperSpeed(on) {
     state.superSpeed = on;
     Il2Cpp.perform(() => {
-      installCarHook();
-      eachInstance("CarMover", (o) => applySpeedTo(o, on));
+      const o = refObj("car");
+      if (o != null)
+        applySpeed(o);
     });
     status(`s\xFCper h\u0131z ${on ? `A\xC7IK \xD7${state.speedMult}` : "kapal\u0131"}`);
   }
   function cycleSpeedMult() {
     state.speedMult = state.speedMult >= 5 ? 2 : state.speedMult + 1;
-    if (state.superSpeed) {
-      Il2Cpp.perform(() => eachInstance("CarMover", (o) => applySpeedTo(o, true)));
-    }
+    if (state.superSpeed)
+      Il2Cpp.perform(() => {
+        const o = refObj("car");
+        if (o != null)
+          applySpeed(o);
+      });
     status(`h\u0131z \xE7arpan\u0131 \xD7${state.speedMult}`);
   }
   function instantMaxSpeed() {
     Il2Cpp.perform(() => {
-      eachInstance("CarMover", (o) => {
-        if (o.field("isAI").value)
-          return;
+      const o = refObj("car");
+      if (o == null) {
+        status("araba yok \u2014 yar\u0131\u015Fa gir");
+        return;
+      }
+      try {
         const max = o.method("getMaxSpeed").invoke();
         o.method("setSpeed").invoke(max);
-      });
-      status("an\u0131nda maksimum h\u0131z");
+        status("an\u0131nda maksimum h\u0131z");
+      } catch (e) {
+        status(`olmad\u0131: ${e.message ?? e}`);
+      }
+    });
+  }
+  function resetAll() {
+    state.noCollision = false;
+    state.noTraffic = false;
+    state.noBoundary = false;
+    state.slowTraffic = false;
+    state.superSpeed = false;
+    Il2Cpp.perform(() => {
+      stubCold("RandomCarSpawner", ["SpawnCar"], false);
+      stubCold("CarMover", ["hitBoundary"], false);
+      stubCold("CarCollisionDetector", ["OnTriggerEnter"], false);
+      const c = refObj("collision");
+      if (c != null)
+        setComponentEnabled(c, true);
+      const s2 = refObj("spawner");
+      if (s2 != null) {
+        applyNoTraffic(s2);
+        applySlowTraffic(s2);
+      }
+      const car = refObj("car");
+      if (car != null)
+        applySpeed(car);
+    });
+    setTimeScale(1);
+    status("hepsi kapat\u0131ld\u0131");
+  }
+  function installWatchers() {
+    watchClass("CarMover", ["myStart", "Start", "Awake"], (o) => {
+      try {
+        if (o.field("isAI").value)
+          return;
+      } catch (e) {
+        return;
+      }
+      refs.car = o.handle;
+      if (state.superSpeed)
+        applySpeed(o);
+    });
+    watchClass("RandomCarSpawner", ["Start", "Awake"], (o) => {
+      refs.spawner = o.handle;
+      if (state.noTraffic)
+        applyNoTraffic(o);
+      if (state.slowTraffic)
+        applySlowTraffic(o);
+    });
+    watchClass("CarCollisionDetector", ["Start"], (o) => {
+      refs.collision = o.handle;
+      if (state.noCollision)
+        applyNoCollision(o);
     });
   }
   var ROWS = [
@@ -17299,7 +17325,7 @@ std_string_c_str (StdString * self)
     { kind: "head", text: "D\u0130\u011EER" },
     { kind: "item", label: () => "Oyun h\u0131z\u0131 \xD72  (her \u015Fey)", run: () => setTimeScale(2) },
     { kind: "item", label: () => "Oyun h\u0131z\u0131 \xD71  (normal)", run: () => setTimeScale(1) },
-    { kind: "item", label: () => "API d\xF6k\xFCm\xFC \xE7\u0131kar", run: () => dumpApi() }
+    { kind: "item", label: () => "HEPS\u0130N\u0130 KAPAT", run: () => resetAll() }
   ];
   var menuBuilt = false;
   function jstr(s) {
@@ -17492,10 +17518,9 @@ std_string_c_str (StdString * self)
     Il2Cpp.perform(() => {
       log(`il2cpp haz\u0131r \u2014 unity ${Il2Cpp.unityVersion}`);
       try {
-        dumpClassNames();
-        dumpApi();
+        installWatchers();
       } catch (e) {
-        log(`d\xF6k\xFCm yaz\u0131lamad\u0131: ${e.message ?? e}`);
+        log(`izleyiciler kurulamad\u0131: ${e.message ?? e}`);
       }
     });
   }

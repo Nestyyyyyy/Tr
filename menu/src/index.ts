@@ -129,13 +129,19 @@ function dumpApi(): void {
 
 // ------------------------------------------------------------ hileler -------
 /*
- * PERFORMANS NOTU (onemli):
- * Ilk surumde super hiz icin her 1.5 sn'de Il2Cpp.gc.choose() cagriliyordu.
- * O cagri TUM heap'i tarar; oyun ortasinda surekli yapinca hem kasiyor hem
- * cokertiyordu. Artik periyodik tarama YOK:
- *   - Araba olustugunda CarMover.myStart'a Interceptor.attach ile baglaniyoruz
- *     (orijinal kod calismaya devam eder, sadece dinliyoruz -> bedava).
- *   - gc.choose yalnizca kullanici bir toggle'a bastiginda, tek seferlik.
+ * MIMARI (iki hatanin dersi):
+ *
+ * 1) gc.choose() ASLA kullanilmiyor. Heap taramasi saniyeler surebiliyor ve
+ *    dugmeye basildiginda UI thread'inde calistigi icin Android uygulamayi
+ *    "yanit vermiyor" diye olduruyordu. Bunun yerine nesneleri OLUSURKEN
+ *    yakaliyoruz (Start/Awake'e Interceptor.attach) ve referansi sakliyoruz.
+ *    Interceptor.attach orijinali bozmaz, sadece dinler.
+ *
+ * 2) Sicak metotlar (her karede calisan OnTriggerStay, checkBoundary) JS ile
+ *    DEGISTIRILMIYOR. Her cagri JS motoruna girdigi icin oyunu kasiyordu.
+ *    Bunun yerine bilesenin kendisi devre disi birakiliyor (set_enabled=false)
+ *    -> tek seferlik yazma, kare basina sifir maliyet.
+ *    Yalnizca SOGUK metotlar (SpawnCar, hitBoundary) stub'laniyor.
  */
 
 const state = {
@@ -148,11 +154,18 @@ const state = {
 };
 
 let lastStatus = "hazır";
-let carStartHook: any = null;
+const hooked = new Set<string>();
 
-/** Degistirdigimiz alanlarin orijinalleri (nesne bazinda). */
+/** Olusurken yakalanan canli nesneler (handle olarak). */
+const refs: { [k: string]: NativePointer | undefined } = {};
+
 const originals = new Map<string, { ms: number; acc: number }>();
-const spawnerOriginals = new Map<string, { min: number; max: number }>();
+const spawnerOrig = new Map<string, { min: number; max: number }>();
+
+function status(msg: string): void {
+    lastStatus = msg;
+    log(msg);
+}
 
 function csClass(name: string): Il2Cpp.Class | null {
     for (const asmName of ["Assembly-CSharp", "Assembly-CSharp-firstpass"]) {
@@ -164,26 +177,70 @@ function csClass(name: string): Il2Cpp.Class | null {
     return findClass(name);
 }
 
-/** Tek seferlik heap taramasi. Periyodik ASLA cagirma. */
-function eachInstance(className: string, cb: (o: Il2Cpp.Object) => void): number {
-    const k = csClass(className);
-    if (k == null) { log(`${className} bulunamadı`); return 0; }
-    let n = 0;
-    for (const obj of Il2Cpp.gc.choose(k)) {
-        try { cb(obj); n++; } catch (e: any) { log(`${className} atlandı: ${e.message ?? e}`); }
+/** Saklanan referansi guvenle nesneye cevirir; olu ise null. */
+function refObj(key: string): Il2Cpp.Object | null {
+    const h = refs[key];
+    if (h == null || h.isNull()) return null;
+    try { return new Il2Cpp.Object(h); } catch (e) { return null; }
+}
+
+/** Sinif hiyerarsisinde metot arar (set_enabled MonoBehaviour'da). */
+function methodOf(o: Il2Cpp.Object, name: string): Il2Cpp.Method | null {
+    let k: Il2Cpp.Class | null = o.class;
+    while (k != null) {
+        try {
+            const m = k.tryMethod(name);
+            if (m != null) return m;
+        } catch (e) { /* devam */ }
+        k = k.parent;
     }
-    return n;
+    return null;
 }
 
-function status(msg: string): void {
-    lastStatus = msg;
-    log(msg);
+/** MonoBehaviour bilesenini ac/kapat. Kare basina maliyeti yok. */
+function setComponentEnabled(o: Il2Cpp.Object, on: boolean): boolean {
+    try {
+        const m = methodOf(o, "set_enabled");
+        if (m == null) return false;
+        o.method("set_enabled").invoke(on);
+        return true;
+    } catch (e) {
+        return false;
+    }
 }
 
-/** Metodu bos implementasyona alir / geri dondurur. */
-function toggleStub(className: string, methods: string[], on: boolean): void {
+/**
+ * Nesne olusurken yakala. Interceptor.attach ORIJINALI BOZMAZ ve nesne
+ * basina bir kez calisir; kare basina maliyeti yoktur.
+ */
+function watchClass(className: string, candidates: string[], onCreated: (o: Il2Cpp.Object) => void): void {
+    if (hooked.has(className)) return;
     const k = csClass(className);
     if (k == null) { log(`${className} yok`); return; }
+    for (const name of candidates) {
+        let m: any = null;
+        try { m = k.method(name); } catch (e) { continue; }
+        if (m == null) continue;
+        try {
+            Interceptor.attach(m.virtualAddress, {
+                onEnter(this: any, args: any) { this.self = args[0]; },
+                onLeave(this: any) {
+                    try { onCreated(new Il2Cpp.Object(this.self)); } catch (e) { /* yoksay */ }
+                },
+            });
+            hooked.add(className);
+            log(`${className}.${name} dinleniyor`);
+            return;
+        } catch (e: any) {
+            log(`${className}.${name} hook hatası: ${e.message ?? e}`);
+        }
+    }
+}
+
+/** Yalnizca SOGUK metotlar icin. Sicak metotta kullanma. */
+function stubCold(className: string, methods: string[], on: boolean): void {
+    const k = csClass(className);
+    if (k == null) return;
     for (const name of methods) {
         try {
             const m = k.method(name);
@@ -209,7 +266,7 @@ function setMoney(amount: number): void {
     // IKISI BIRDEN yazilmali; yoksa oyun uyusmazlik gorup parayi sifirliyor.
     old.method("saveTotalMoney").invoke(amount, true);
     sec.method("saveTotalMoneyNew").invoke(amount, true);
-    status(`para: ${amount.toLocaleString("tr")}`);
+    status(`para: ${amount}`);
 }
 
 function addMoney(delta: number): void {
@@ -253,7 +310,7 @@ function maxUpgrades(): void {
                 for (let v = 0; v < 8; v++) old.method("saveVinylAvailableForCar").invoke(v, id, true);
             } catch (e) { /* yok */ }
         }
-        status("yükseltmeler ve görseller maksimum");
+        status("yükseltmeler maksimum");
     });
 }
 
@@ -268,9 +325,7 @@ function unlockExtras(): void {
                          "saveLocationForestAvailable", "saveLocationDesertAvailable"]) {
             try { sec.method(m).invoke(true, true); } catch (e) { /* imza farkli */ }
         }
-        for (const m of ["saveLocationSnowyAvailable", "saveLocationCityAvailable",
-                         "saveLocationRainyAvailable", "saveLocationAutumnAvailable",
-                         "saveLocationForestAvailable", "saveLocationDesertAvailable"]) {
+        for (const m of ["saveLocationSnowyAvailable", "saveLocationCityAvailable"]) {
             try { old.method(m).invoke(true, true); } catch (e) { /* yok */ }
         }
         status("reklamsız + çift para + haritalar");
@@ -285,133 +340,165 @@ function maxScores(): void {
                          "saveBestTimeAttackScoreNormal", "saveBestPoliceChaseScore"]) {
             try { old.method(m).invoke(999999.0); } catch (e) { /* yok */ }
         }
-        status("skorlar maksimuma çekildi");
+        status("skorlar maksimum");
     });
 }
 
 // ------------------------------------------------------------ çarpışma ------
-function setNoCollision(on: boolean): void {
-    Il2Cpp.perform(() => {
-        toggleStub("CarCollisionDetector", ["OnTriggerEnter", "OnTriggerStay"], on);
-        state.noCollision = on;
-        status(`çarpışma ${on ? "KAPALI" : "açık"}`);
-    });
+/*
+ * ONCEKI HATA: OnTriggerStay stub'lanmisti. Unity onu her karede, her temas
+ * eden collider icin cagirir -> saniyede yuzlerce JS gecisi -> kasma.
+ * DOGRUSU: bilesenin kendisini kapatmak. Callback'ler hic tetiklenmez.
+ */
+function applyNoCollision(o: Il2Cpp.Object): void {
+    if (!setComponentEnabled(o, !state.noCollision)) {
+        // set_enabled yoksa yalnizca SOGUK olan OnTriggerEnter'a düş.
+        stubCold("CarCollisionDetector", ["OnTriggerEnter"], state.noCollision);
+    }
 }
 
-function setNoBoundary(on: boolean): void {
+function setNoCollision(on: boolean): void {
+    state.noCollision = on;
     Il2Cpp.perform(() => {
-        toggleStub("CarMover", ["checkBoundary", "hitBoundary"], on);
-        state.noBoundary = on;
-        status(`yol sınırı ${on ? "KAPALI" : "açık"}`);
+        const o = refObj("collision");
+        if (o != null) applyNoCollision(o);
+        else stubCold("CarCollisionDetector", ["OnTriggerEnter"], on);
     });
+    status(`çarpışma ${on ? "KAPALI" : "açık"}`);
+}
+
+/* hitBoundary SOGUK (yalnizca carpinca calisir); checkBoundary SICAK, ona dokunma. */
+function setNoBoundary(on: boolean): void {
+    state.noBoundary = on;
+    Il2Cpp.perform(() => stubCold("CarMover", ["hitBoundary"], on));
+    status(`yol sınırı ${on ? "KAPALI" : "açık"}`);
 }
 
 // --------------------------------------------------------------- trafik -----
+function applyNoTraffic(o: Il2Cpp.Object): void {
+    try { o.field<boolean>("canSpawn").value = !state.noTraffic; } catch (e) { /* yoksay */ }
+}
+
 function setNoTraffic(on: boolean): void {
+    state.noTraffic = on;
     Il2Cpp.perform(() => {
-        toggleStub("RandomCarSpawner", ["SpawnCar"], on);
-        eachInstance("RandomCarSpawner", o => { o.field<boolean>("canSpawn").value = !on; });
-        state.noTraffic = on;
-        status(`trafik ${on ? "KAPALI" : "açık"}`);
+        // SpawnCar soguk: saniyede birkac kez, stub'lamak guvenli.
+        stubCold("RandomCarSpawner", ["SpawnCar"], on);
+        const o = refObj("spawner");
+        if (o != null) applyNoTraffic(o);
     });
+    status(`trafik ${on ? "KAPALI" : "açık"}`);
+}
+
+function applySlowTraffic(o: Il2Cpp.Object): void {
+    try {
+        const key = o.handle.toString();
+        const fMin = o.field<number>("trafficMinSpeed");
+        const fMax = o.field<number>("trafficMaxSpeed");
+        if (!spawnerOrig.has(key)) {
+            spawnerOrig.set(key, {
+                min: fMin.value as unknown as number,
+                max: fMax.value as unknown as number,
+            });
+        }
+        const orig = spawnerOrig.get(key);
+        if (orig == null) return;
+        fMin.value = state.slowTraffic ? orig.min * 0.25 : orig.min;
+        fMax.value = state.slowTraffic ? orig.max * 0.25 : orig.max;
+    } catch (e) { /* yoksay */ }
 }
 
 function setSlowTraffic(on: boolean): void {
+    state.slowTraffic = on;
     Il2Cpp.perform(() => {
-        eachInstance("RandomCarSpawner", o => {
-            const key = o.handle.toString();
-            const fMin = o.field<number>("trafficMinSpeed");
-            const fMax = o.field<number>("trafficMaxSpeed");
-            if (!originals.has(key) && !spawnerOriginals.has(key)) {
-                spawnerOriginals.set(key, {
-                    min: fMin.value as unknown as number,
-                    max: fMax.value as unknown as number,
-                });
-            }
-            const orig = spawnerOriginals.get(key);
-            if (orig == null) return;
-            fMin.value = on ? orig.min * 0.25 : orig.min;
-            fMax.value = on ? orig.max * 0.25 : orig.max;
-        });
-        state.slowTraffic = on;
-        status(`yavaş trafik ${on ? "AÇIK" : "kapalı"}`);
+        const o = refObj("spawner");
+        if (o != null) applySlowTraffic(o);
     });
+    status(`yavaş trafik ${on ? "AÇIK" : "kapalı"}`);
 }
 
 // ----------------------------------------------------------- süper hız ------
-/** Sadece OYUNCUNUN arabasi: isAI == false. */
-function applySpeedTo(o: Il2Cpp.Object, on: boolean): void {
-    if (o.field<boolean>("isAI").value) return;
-    const key = o.handle.toString();
-    const fMs = o.field<number>("maxSpeed");
-    const fAcc = o.field<number>("maxAcceleration");
-    if (!originals.has(key)) {
-        originals.set(key, {
-            ms: fMs.value as unknown as number,
-            acc: fAcc.value as unknown as number,
-        });
-    }
-    const orig = originals.get(key);
-    if (orig == null) return;
-    fMs.value = on ? orig.ms * state.speedMult : orig.ms;
-    fAcc.value = on ? orig.acc * 2 : orig.acc;
-}
-
-/**
- * Araba olustugunda yakala. Interceptor.attach ORIJINALI BOZMAZ - sadece
- * dinler. Yarista bir kez calisir, yani bedava.
- */
-function installCarHook(): void {
-    if (carStartHook != null) return;
-    const k = csClass("CarMover");
-    if (k == null) return;
-    let m: any = null;
-    for (const name of ["myStart", "Start", "Awake"]) {
-        try { m = k.method(name); break; } catch (e) { /* sonrakini dene */ }
-    }
-    if (m == null) { log("CarMover başlangıç metodu yok"); return; }
+function applySpeed(o: Il2Cpp.Object): void {
     try {
-        carStartHook = Interceptor.attach(m.virtualAddress, {
-            onEnter(this: any, args: any) { this.self = args[0]; },
-            onLeave(this: any) {
-                if (!state.superSpeed) return;
-                try {
-                    applySpeedTo(new Il2Cpp.Object(this.self), true);
-                } catch (e) { /* bu nesne olmadi */ }
-            },
-        });
-        log("CarMover hook kuruldu (olay tabanlı, taramasız)");
-    } catch (e: any) {
-        log(`CarMover hook kurulamadı: ${e.message ?? e}`);
-    }
+        if (o.field<boolean>("isAI").value) return;   // trafik degil, sadece sen
+        const key = o.handle.toString();
+        const fMs = o.field<number>("maxSpeed");
+        const fAcc = o.field<number>("maxAcceleration");
+        if (!originals.has(key)) {
+            originals.set(key, {
+                ms: fMs.value as unknown as number,
+                acc: fAcc.value as unknown as number,
+            });
+        }
+        const orig = originals.get(key);
+        if (orig == null) return;
+        fMs.value = state.superSpeed ? orig.ms * state.speedMult : orig.ms;
+        fAcc.value = state.superSpeed ? orig.acc * 2 : orig.acc;
+    } catch (e) { /* yoksay */ }
 }
 
 function setSuperSpeed(on: boolean): void {
     state.superSpeed = on;
     Il2Cpp.perform(() => {
-        installCarHook();
-        // Su an sahnedeki arabaya da uygula: TEK SEFERLIK tarama.
-        eachInstance("CarMover", o => applySpeedTo(o, on));
+        const o = refObj("car");
+        if (o != null) applySpeed(o);
     });
     status(`süper hız ${on ? `AÇIK ×${state.speedMult}` : "kapalı"}`);
 }
 
 function cycleSpeedMult(): void {
     state.speedMult = state.speedMult >= 5 ? 2 : state.speedMult + 1;
-    if (state.superSpeed) {
-        Il2Cpp.perform(() => eachInstance("CarMover", o => applySpeedTo(o, true)));
-    }
+    if (state.superSpeed) Il2Cpp.perform(() => { const o = refObj("car"); if (o != null) applySpeed(o); });
     status(`hız çarpanı ×${state.speedMult}`);
 }
 
 function instantMaxSpeed(): void {
     Il2Cpp.perform(() => {
-        eachInstance("CarMover", o => {
-            if (o.field<boolean>("isAI").value) return;
+        const o = refObj("car");
+        if (o == null) { status("araba yok — yarışa gir"); return; }
+        try {
             const max = o.method<number>("getMaxSpeed").invoke() as unknown as number;
             o.method("setSpeed").invoke(max);
-        });
-        status("anında maksimum hız");
+            status("anında maksimum hız");
+        } catch (e: any) {
+            status(`olmadı: ${e.message ?? e}`);
+        }
+    });
+}
+
+function resetAll(): void {
+    state.noCollision = false;
+    state.noTraffic = false;
+    state.noBoundary = false;
+    state.slowTraffic = false;
+    state.superSpeed = false;
+    Il2Cpp.perform(() => {
+        stubCold("RandomCarSpawner", ["SpawnCar"], false);
+        stubCold("CarMover", ["hitBoundary"], false);
+        stubCold("CarCollisionDetector", ["OnTriggerEnter"], false);
+        const c = refObj("collision"); if (c != null) setComponentEnabled(c, true);
+        const s2 = refObj("spawner"); if (s2 != null) { applyNoTraffic(s2); applySlowTraffic(s2); }
+        const car = refObj("car"); if (car != null) applySpeed(car);
+    });
+    setTimeScale(1.0);
+    status("hepsi kapatıldı");
+}
+
+/** Oyun nesneleri olusurken yakalanir; toggle'lar bu referanslarla calisir. */
+function installWatchers(): void {
+    watchClass("CarMover", ["myStart", "Start", "Awake"], o => {
+        try { if (o.field<boolean>("isAI").value) return; } catch (e) { return; }
+        refs.car = o.handle;
+        if (state.superSpeed) applySpeed(o);
+    });
+    watchClass("RandomCarSpawner", ["Start", "Awake"], o => {
+        refs.spawner = o.handle;
+        if (state.noTraffic) applyNoTraffic(o);
+        if (state.slowTraffic) applySlowTraffic(o);
+    });
+    watchClass("CarCollisionDetector", ["Start"], o => {
+        refs.collision = o.handle;
+        if (state.noCollision) applyNoCollision(o);
     });
 }
 
@@ -449,7 +536,7 @@ const ROWS: Row[] = [
     { kind: "head", text: "DİĞER" },
     { kind: "item", label: () => "Oyun hızı ×2  (her şey)", run: () => setTimeScale(2.0) },
     { kind: "item", label: () => "Oyun hızı ×1  (normal)", run: () => setTimeScale(1.0) },
-    { kind: "item", label: () => "API dökümü çıkar", run: () => dumpApi() },
+    { kind: "item", label: () => "HEPSİNİ KAPAT", run: () => resetAll() },
 ];
 
 let menuBuilt = false;
@@ -670,10 +757,9 @@ function main(): void {
         log(`il2cpp hazır — unity ${Il2Cpp.unityVersion}`);
         // Sınıf listesini kendiliğinden yaz: menüden düğmeye basmaya gerek kalmasın.
         try {
-            dumpClassNames();
-            dumpApi();
+            installWatchers();
         } catch (e: any) {
-            log(`döküm yazılamadı: ${e.message ?? e}`);
+            log(`izleyiciler kurulamadı: ${e.message ?? e}`);
         }
     });
 }
