@@ -87,6 +87,51 @@ b64_oneline() {
   base64 < "$1" | tr -d '\n'
 }
 
+# 'jar' PATH'te olmayabilir (Windows'ta java kurulu ama JDK/bin PATH'te değil).
+# java'nın yanında ve JAVA_HOME altında ara.
+find_jar_bin() {
+  local j d c
+  if command -v jar >/dev/null 2>&1; then command -v jar; return 0; fi
+  j="$(command -v java 2>/dev/null || true)"
+  if [ -n "$j" ]; then
+    d="$(dirname "$j")"
+    for c in "$d/jar" "$d/jar.exe"; do
+      [ -x "$c" ] && { echo "$c"; return 0; }
+    done
+  fi
+  if [ -n "${JAVA_HOME:-}" ]; then
+    for c in "$JAVA_HOME/bin/jar" "$JAVA_HOME/bin/jar.exe"; do
+      [ -x "$c" ] && { echo "$c"; return 0; }
+    done
+  fi
+  echo ""
+}
+
+# Zip açar. Sırayla: unzip -> python -> jar -> PowerShell (Windows'ta hep var).
+extract_zip() {  # extract_zip <zip> <hedef-dizin>
+  local zip="$1" dest="$2" jarbin
+  [ -f "$zip" ] || die "Zip yok: $zip"
+  mkdir -p "$dest"
+
+  if command -v unzip >/dev/null 2>&1; then
+    unzip -o -q "$zip" -d "$dest" && return 0
+  fi
+  if [ -n "$PYTHON" ]; then
+    "$PYTHON" -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' \
+      "$zip" "$dest" && return 0
+  fi
+  jarbin="$(find_jar_bin)"
+  if [ -n "$jarbin" ]; then
+    ( cd "$dest" && "$jarbin" xf "$zip" ) && return 0
+  fi
+  if is_msys && command -v powershell >/dev/null 2>&1; then
+    powershell -NoProfile -Command \
+      "Expand-Archive -LiteralPath '$(cygpath -w "$zip")' -DestinationPath '$(cygpath -w "$dest")' -Force" \
+      && return 0
+  fi
+  die "Zip açacak araç bulunamadı (unzip / python / jar / powershell)."
+}
+
 # Uygulamanın özel veri klasörüne dosya yazar (root'suz, run-as üzerinden).
 # Önce hızlı yol: adb push -> uygulamanın kendi harici klasörü -> run-as cp.
 # Olmazsa yavaş ama her yerde çalışan base64 parçalı aktarım.

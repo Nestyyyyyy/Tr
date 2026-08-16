@@ -34,8 +34,12 @@ with zipfile.ZipFile(zf) as z:
     z.extractall(dest, members=names or None)
 ' "$zip" "$dest" "$@"
   else
-    # jar her zaman var (JDK zorunlu). Secili dosya cikarabiliyor.
-    ( cd "$dest" && jar xf "$zip" "$@" )
+    local jarbin; jarbin="$(find_jar_bin)"
+    if [ -n "$jarbin" ]; then
+      ( cd "$dest" && "$jarbin" xf "$zip" "$@" )
+    else
+      extract_zip "$zip" "$dest"
+    fi
   fi
 }
 
@@ -67,7 +71,7 @@ if [ ! -f "$TOOL_DIR/Il2CppDumper.exe" ]; then
   curl -fL --retry 4 --retry-delay 2 --progress-bar -o "$BIN_DIR/il2cppdumper.zip" "$IL2CPP_URL" \
     || die "Il2CppDumper indirilemedi."
   rm -rf "$TOOL_DIR"
-  unzip_into "$BIN_DIR/il2cppdumper.zip" "$TOOL_DIR"
+  extract_zip "$BIN_DIR/il2cppdumper.zip" "$TOOL_DIR"
   rm -f "$BIN_DIR/il2cppdumper.zip"
   ok "Il2CppDumper -> $TOOL_DIR"
 fi

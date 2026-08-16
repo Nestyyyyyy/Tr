@@ -27,18 +27,26 @@ GADGET_ZIP="$ROOT_DIR/menu/vendor/libfrida-gadget.zip"
 [ -f "$GADGET_ZIP" ] || die "frida-gadget paketi yok: $GADGET_ZIP"
 
 mkdir -p "$OUT_DIR" "$WORK_DIR"
-rm -rf "$DEC"; rm -f "$UNSIGNED"
+rm -f "$UNSIGNED"
 
 # --- 1. APK'yı aç (sadece classes.dex; digerleri ham kopyalanir) --------------
-info "APK açılıyor (yalnızca classes.dex çözülüyor, birkaç dakika sürebilir)..."
-DECODE_FLAGS="--only-main-classes"
-if [ "${FULL_DECODE:-0}" = "1" ]; then
-  warn "FULL_DECODE=1 — tüm dex dosyaları çözülecek, bu çok daha yavaş."
-  DECODE_FLAGS=""
+# Çözme adımı dakikalar sürüyor. Zaten çözülmüşse tekrar etme —
+# baştan istersen: FRESH=1 ./tr.sh menu
+if [ -f "$DEC/AndroidManifest.xml" ] && [ "${FRESH:-0}" != "1" ]; then
+  ok "APK zaten çözülmüş, o adım atlandı ($DEC)"
+  info "Baştan çözmek için: FRESH=1 ./tr.sh menu"
+else
+  rm -rf "$DEC"
+  info "APK açılıyor (yalnızca classes.dex çözülüyor, birkaç dakika sürebilir)..."
+  DECODE_FLAGS="--only-main-classes"
+  if [ "${FULL_DECODE:-0}" = "1" ]; then
+    warn "FULL_DECODE=1 — tüm dex dosyaları çözülecek, bu çok daha yavaş."
+    DECODE_FLAGS=""
+  fi
+  # shellcheck disable=SC2086
+  java -jar "$APKTOOL_JAR" d $DECODE_FLAGS -f -o "$DEC" "$SRC" >/dev/null \
+    || die "apktool decode başarısız."
 fi
-# shellcheck disable=SC2086
-java -jar "$APKTOOL_JAR" d $DECODE_FLAGS -f -o "$DEC" "$SRC" >/dev/null \
-  || die "apktool decode başarısız."
 
 MANIFEST="$DEC/AndroidManifest.xml"
 [ -f "$MANIFEST" ] || die "AndroidManifest.xml çıkmadı."
@@ -133,7 +141,7 @@ LIBDIR="$DEC/lib/arm64-v8a"
 [ -d "$LIBDIR" ] || die "lib/arm64-v8a yok — APK arm64 içermiyor olabilir."
 
 info "frida-gadget yerleştiriliyor..."
-( cd "$LIBDIR" && jar xf "$GADGET_ZIP" ) || die "gadget açılamadı."
+extract_zip "$GADGET_ZIP" "$LIBDIR"
 [ -f "$LIBDIR/libfrida-gadget.so" ] || die "libfrida-gadget.so çıkmadı."
 ok "libfrida-gadget.so ($(du -h "$LIBDIR/libfrida-gadget.so" | cut -f1))"
 
