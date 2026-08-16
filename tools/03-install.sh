@@ -22,8 +22,8 @@ fi
 
 if [ -z "$APK" ]; then
   # Argüman verilmediyse: önce menülü sürüm, yoksa sade sürüm.
-  APK="$(ls -1 "$OUT_DIR"/*-menu.apk 2>/dev/null | head -1)"
-  [ -n "$APK" ] || APK="$(ls -1 "$OUT_DIR"/*-debuggable.apk 2>/dev/null | head -1)"
+  APK="$(first_match "$OUT_DIR" '*-menu.apk')"
+  [ -n "$APK" ] || APK="$(first_match "$OUT_DIR" '*-debuggable.apk')"
 fi
 
 [ -n "$APK" ] && [ -f "$APK" ] || die "Kurulacak APK yok.

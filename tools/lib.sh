@@ -87,6 +87,43 @@ b64_oneline() {
   base64 < "$1" | tr -d '\n'
 }
 
+# Kalıba uyan ilk dosyayı döndürür; eşleşme yoksa boş döner.
+# "ls ... | head" KULLANMA: set -o pipefail açıkken ls eşleşme bulamayınca
+# tüm boru hattı hata döner ve script hiçbir mesaj basmadan ölür.
+first_match() {  # first_match <dizin> <kalip>
+  find "$1" -maxdepth 1 -name "$2" 2>/dev/null | sort | head -1 || true
+}
+
+# APK'yı zipalign'lar + imzalar, sonucu <hedef> yoluna taşır.
+# İmzalayıcı çıktısı loglanır; bir şey ters giderse ekrana basılır.
+sign_apk() {  # sign_apk <imzasiz.apk> <hedef.apk>
+  local unsigned="$1" final="$2" log="$WORK_DIR/sign.log" produced base
+  [ -s "$unsigned" ] || die "İmzalanacak APK yok/boş: $unsigned"
+  need_jar "$SIGNER_JAR"
+  mkdir -p "$OUT_DIR" "$WORK_DIR"
+
+  base="$(basename "$unsigned" .apk)"
+  rm -f "$OUT_DIR/$base"-aligned*.apk "$OUT_DIR/$base"-aligned*.idsig
+
+  if ! java -jar "$SIGNER_JAR" -a "$unsigned" -o "$OUT_DIR" --allowResign > "$log" 2>&1; then
+    warn "İmzalayıcı hata verdi. Son satırlar:"
+    tail -20 "$log" | sed 's/^/    /' >&2
+    die "İmzalama başarısız (tam log: $log)"
+  fi
+
+  produced="$(first_match "$OUT_DIR" "$base-aligned*Signed.apk")"
+  if [ -z "$produced" ]; then
+    warn "İmzalı dosya bulunamadı. İmzalayıcı çıktısı:"
+    tail -20 "$log" | sed 's/^/    /' >&2
+    warn "out/ içeriği:"
+    ls -la "$OUT_DIR" | sed 's/^/    /' >&2
+    die "İmzalı APK üretilemedi (tam log: $log)"
+  fi
+
+  mv "$produced" "$final"
+  rm -f "$OUT_DIR/$base"-aligned*.idsig
+}
+
 # 'jar' PATH'te olmayabilir (Windows'ta java kurulu ama JDK/bin PATH'te değil).
 # java'nın yanında ve JAVA_HOME altında ara.
 find_jar_bin() {

@@ -166,15 +166,8 @@ java -jar "$APKTOOL_JAR" b "$DEC" -o "$UNSIGNED" >/dev/null \
   || die "apktool build başarısız. Log: $DEC"
 
 info "Zipalign + imzalama..."
-rm -f "$OUT_DIR"/menu-unsigned-aligned*.apk "$OUT_DIR"/menu-unsigned-aligned*.idsig
-java -jar "$SIGNER_JAR" -a "$UNSIGNED" -o "$OUT_DIR" --allowResign >/dev/null \
-  || die "İmzalama başarısız."
-
-SIGNED="$(ls -1 "$OUT_DIR"/menu-unsigned-aligned*Signed.apk 2>/dev/null | head -1)"
-[ -n "$SIGNED" ] || die "İmzalı APK üretilemedi."
 FINAL="$OUT_DIR/${APK_PKG}-menu.apk"
-mv "$SIGNED" "$FINAL"
-rm -f "$OUT_DIR"/menu-unsigned-aligned*.idsig
+sign_apk "$UNSIGNED" "$FINAL"
 
 echo
 ok "Hazır: $FINAL  ($(du -h "$FINAL" | cut -f1))"

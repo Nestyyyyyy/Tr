@@ -65,6 +65,18 @@ patch_manifest "$M2" >/dev/null
 check "allowBackup yoksa eklenir"         1 "$(grep -c 'android:allowBackup="true"' "$M2")"
 check "debuggable yoksa eklenir"          1 "$(grep -c 'android:debuggable="true"' "$M2")"
 
+# --- 2b. first_match: pipefail altında sessiz ölmemeli ----------------------
+echo; info "first_match (pipefail tuzağı)"
+mkdir -p "$TMPD/out"
+: > "$TMPD/out/app-menu.apk"
+: > "$TMPD/out/app-debuggable.apk"
+check "eşleşme bulur"              "$TMPD/out/app-menu.apk" "$(first_match "$TMPD/out" '*-menu.apk')"
+# Asıl regresyon: eşleşme YOKKEN script ölmemeli, boş dönmeli.
+rc=0; miss="$(first_match "$TMPD/out" '*-yok.apk')" || rc=$?
+check "eşleşme yokken hata vermez" "0" "$rc"
+check "eşleşme yokken boş döner"   ""  "$miss"
+check "olmayan dizinde de ölmez"   ""  "$(first_match "$TMPD/hicyok" '*.apk')"
+
 # --- 3. prefs düzenleyici --------------------------------------------------
 echo; info "prefs_edit.awk"
 P="$TMPD/prefs.xml"

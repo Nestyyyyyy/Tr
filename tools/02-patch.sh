@@ -37,16 +37,8 @@ java -jar "$APKTOOL_JAR" b "$DEC" -o "$UNSIGNED" >/dev/null \
   || die "apktool build başarısız. (Nadir; olursa work/decoded/ altındaki apktool loglarına bak.)"
 
 info "Zipalign + imzalama (uber-apk-signer'ın debug anahtarı)..."
-rm -f "$OUT_DIR"/unsigned-aligned*.apk "$OUT_DIR"/*.idsig
-java -jar "$SIGNER_JAR" -a "$UNSIGNED" -o "$OUT_DIR" --allowResign >/dev/null \
-  || die "İmzalama başarısız."
-
-SIGNED="$(ls -1 "$OUT_DIR"/unsigned-aligned*Signed.apk 2>/dev/null | head -1)"
-[ -n "$SIGNED" ] || die "İmzalı APK üretilemedi."
-
 FINAL="$OUT_DIR/${APK_PKG:-app}-debuggable.apk"
-mv "$SIGNED" "$FINAL"
-rm -f "$OUT_DIR"/unsigned-aligned*.idsig
+sign_apk "$UNSIGNED" "$FINAL"
 
 echo
 ok "Hazır: $FINAL  ($(du -h "$FINAL" | cut -f1))"
