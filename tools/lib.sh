@@ -29,6 +29,36 @@ need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "'$1' bulunamadı. $2"
 }
 
+# Git Bash / MSYS mi? (Windows)
+is_msys() {
+  case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) return 0 ;; *) return 1 ;; esac
+}
+
+# python3 / python / py — Windows'ta üçü de olabilir. Boş kalabilir (opsiyonel bağımlılık).
+PYTHON=""
+for _c in python3 python py; do
+  if command -v "$_c" >/dev/null 2>&1 \
+     && "$_c" -c 'import sys; sys.exit(0 if sys.version_info[0] == 3 else 1)' >/dev/null 2>&1; then
+    PYTHON="$_c"; break
+  fi
+done
+unset _c
+
+need_python() {
+  [ -n "$PYTHON" ] || die "python3 bulunamadı. $1"
+}
+
+# Dosya özeti — cksum her yerde yok (Git Bash), sırayla dene.
+file_sum() {
+  if command -v md5sum >/dev/null 2>&1; then
+    md5sum < "$1" | awk '{print $1}'
+  elif command -v cksum >/dev/null 2>&1; then
+    cksum < "$1" | awk '{print $1"-"$2}'
+  else
+    wc -c < "$1" | tr -d ' '
+  fi
+}
+
 need_java() {
   need_cmd java "JDK 17 kur: https://adoptium.net (veya: sudo apt install openjdk-17-jdk)"
 }

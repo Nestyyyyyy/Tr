@@ -28,7 +28,9 @@ if pkg_installed; then
 fi
 
 info "Kuruluyor..."
-adb install -r "$APK" || die "Kurulum başarısız. (Telefonda 'USB ile kurulum' iznini onaylaman gerekebilir.)"
+# Göreli yol: Git Bash'in yol dönüşümüne takılmasın.
+( cd "$(dirname "$APK")" && adb install -r "$(basename "$APK")" ) \
+  || die "Kurulum başarısız. (Telefonda 'USB ile kurulum' iznini onaylaman gerekebilir.)"
 
 pkg_installed || die "Kurulum sonrası paket görünmüyor."
 ok "Kuruldu."

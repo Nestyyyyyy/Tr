@@ -1,0 +1,13 @@
+# Windows'ta klonlarken script'lerin CRLF'e çevrilmesi bash'i bozar
+# ("$'\r': command not found"). Bu dosyalar her platformda LF kalmalı.
+* text=auto eol=lf
+*.sh    text eol=lf
+*.py    text eol=lf
+Makefile text eol=lf
+
+# PowerShell Windows tarafında çalışır, CRLF olabilir
+*.ps1   text eol=crlf
+
+*.apk binary
+*.jar binary
+*.zip binary

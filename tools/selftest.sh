@@ -25,8 +25,8 @@ for f in "$ROOT_DIR"/tools/*.sh; do
     check "$(basename "$f")" "ok" "sözdizimi hatası"
   fi
 done
-if command -v python3 >/dev/null 2>&1; then
-  if python3 -c "import ast,sys; ast.parse(open('$ROOT_DIR/tools/prefs_edit.py').read())"; then
+if [ -n "$PYTHON" ]; then
+  if "$PYTHON" -c "import ast,sys; ast.parse(open('$ROOT_DIR/tools/prefs_edit.py').read())"; then
     check "prefs_edit.py" "ok" "ok"
   else
     check "prefs_edit.py" "ok" "sözdizimi hatası"
@@ -68,7 +68,7 @@ check "allowBackup yoksa eklenir"         1 "$(grep -c 'android:allowBackup="tru
 check "debuggable yoksa eklenir"          1 "$(grep -c 'android:debuggable="true"' "$M2")"
 
 # --- 3. prefs düzenleyici --------------------------------------------------
-if ! command -v python3 >/dev/null 2>&1; then
+if [ -z "$PYTHON" ]; then
   warn "python3 yok, prefs testleri atlandı"
 else
   echo; info "prefs_edit.py"
@@ -88,33 +88,33 @@ XML
   }
 
   fixture
-  check "list 5 anahtar bulur"  "5" "$(python3 "$PY" list "$P" | sed -n 's/.*toplam \([0-9]*\) anahtar/\1/p')"
-  check "get int"               "1500"  "$(python3 "$PY" get "$P" cash)"
-  check "get string"            "emre"  "$(python3 "$PY" get "$P" playerName)"
-  check "get boolean"           "false" "$(python3 "$PY" get "$P" car_3_owned)"
+  check "list 5 anahtar bulur"  "5" "$("$PYTHON" "$PY" list "$P" | sed -n 's/.*toplam \([0-9]*\) anahtar/\1/p')"
+  check "get int"               "1500"  "$("$PYTHON" "$PY" get "$P" cash)"
+  check "get string"            "emre"  "$("$PYTHON" "$PY" get "$P" playerName)"
+  check "get boolean"           "false" "$("$PYTHON" "$PY" get "$P" car_3_owned)"
 
-  rc=0; python3 "$PY" get "$P" yokBoyleAnahtar >/dev/null 2>&1 || rc=$?
+  rc=0; "$PYTHON" "$PY" get "$P" yokBoyleAnahtar >/dev/null 2>&1 || rc=$?
   check "olmayan anahtar -> 3" "3" "$rc"
 
   fixture
-  python3 "$PY" set "$P" cash 999999 >/dev/null
-  check "set int"                    "999999" "$(python3 "$PY" get "$P" cash)"
-  check "komşu anahtar bozulmadı"    "42"     "$(python3 "$PY" get "$P" bestScore)"
-  check "anahtar sayısı sabit"       "5"      "$(python3 "$PY" list "$P" | sed -n 's/.*toplam \([0-9]*\) anahtar/\1/p')"
+  "$PYTHON" "$PY" set "$P" cash 999999 >/dev/null
+  check "set int"                    "999999" "$("$PYTHON" "$PY" get "$P" cash)"
+  check "komşu anahtar bozulmadı"    "42"     "$("$PYTHON" "$PY" get "$P" bestScore)"
+  check "anahtar sayısı sabit"       "5"      "$("$PYTHON" "$PY" list "$P" | sed -n 's/.*toplam \([0-9]*\) anahtar/\1/p')"
 
-  python3 "$PY" set "$P" car_3_owned true >/dev/null
-  check "set boolean"                "true"   "$(python3 "$PY" get "$P" car_3_owned)"
+  "$PYTHON" "$PY" set "$P" car_3_owned true >/dev/null
+  check "set boolean"                "true"   "$("$PYTHON" "$PY" get "$P" car_3_owned)"
 
-  python3 "$PY" set "$P" playerName "hız kralı" >/dev/null
-  check "set string (utf-8, boşluk)" "hız kralı" "$(python3 "$PY" get "$P" playerName)"
+  "$PYTHON" "$PY" set "$P" playerName "hız kralı" >/dev/null
+  check "set string (utf-8, boşluk)" "hız kralı" "$("$PYTHON" "$PY" get "$P" playerName)"
 
   # regex kaçışlarının literal işlendiğini doğrula
-  python3 "$PY" set "$P" playerName 'a\1b\g<0>c' >/dev/null
-  check "değer literal yazılır"      'a\1b\g<0>c' "$(python3 "$PY" get "$P" playerName)"
+  "$PYTHON" "$PY" set "$P" playerName 'a\1b\g<0>c' >/dev/null
+  check "değer literal yazılır"      'a\1b\g<0>c' "$("$PYTHON" "$PY" get "$P" playerName)"
 
   # "cash" ile "cashX" karışmamalı (tam ad eşleşmesi)
   fixture
-  rc=0; python3 "$PY" set "$P" cas 1 >/dev/null 2>&1 || rc=$?
+  rc=0; "$PYTHON" "$PY" set "$P" cas 1 >/dev/null 2>&1 || rc=$?
   check "kısmi ad eşleşmez -> 3"     "3" "$rc"
 
   check "XML kökü korundu"           "1" "$(grep -c '</map>' "$P")"

@@ -4,14 +4,53 @@
 
 source "$(dirname "$0")/lib.sh"
 
-need_cmd unzip "sudo apt install unzip"
-
 SRC="${1:-$WORK_DIR/original.apk}"
 [ -f "$SRC" ] || die "APK yok: $SRC  (önce ./tools/01-pull.sh)"
 
+# unzip Git Bash'te yok; python varsa onunla aynı işi yaparız.
+HAVE_UNZIP=0
+command -v unzip >/dev/null 2>&1 && HAVE_UNZIP=1
+if [ "$HAVE_UNZIP" = "0" ] && [ -z "$PYTHON" ]; then
+  die "unzip da python3 de yok. Birini kur (Windows: python.org, 'Add to PATH' işaretli)."
+fi
+
+# "boyut tarih saat ad" biçiminde liste (unzip -l ile aynı sütun düzeni)
+list_apk() {
+  if [ "$HAVE_UNZIP" = "1" ]; then
+    unzip -l "$1"
+  else
+    "$PYTHON" -c '
+import sys, zipfile
+with zipfile.ZipFile(sys.argv[1]) as z:
+    for i in z.infolist():
+        print("%9d %s %s %s" % (i.file_size, "0000-00-00", "00:00", i.filename))
+' "$1"
+  fi
+}
+
+# Unity sürümünü globalgamemanagers içinden çıkar (bulamazsa sessizce boş döner)
+unity_version() {
+  local member="assets/bin/Data/globalgamemanagers"
+  if [ -n "$PYTHON" ]; then
+    "$PYTHON" -c '
+import re, sys, zipfile
+try:
+    with zipfile.ZipFile(sys.argv[1]) as z:
+        data = z.read(sys.argv[2])
+except Exception:
+    sys.exit(0)
+m = re.search(rb"20[0-9]{2}\.[0-9]+\.[0-9]+[a-z0-9]*", data)
+if m:
+    print(m.group(0).decode("ascii", "replace"))
+' "$1" "$member"
+  elif command -v strings >/dev/null 2>&1; then
+    unzip -p "$1" "$member" 2>/dev/null | strings | grep -m1 -E '^20[0-9]{2}\.[0-9]+\.[0-9]+' || true
+  fi
+}
+
 LIST="$WORK_DIR/apk-listing.txt"
 mkdir -p "$WORK_DIR"
-unzip -l "$SRC" > "$LIST" || die "APK okunamadı."
+list_apk "$SRC" > "$LIST" || die "APK okunamadı."
 
 info "APK: $SRC"
 echo
@@ -21,7 +60,7 @@ if grep -q 'assets/bin/Data/Managed/Assembly-CSharp.dll' "$LIST"; then
   echo "    Oyun mantığı doğrudan C# olarak duruyor:"
   echo "      assets/bin/Data/Managed/Assembly-CSharp.dll"
   echo "    Yapılacak: dosyayı çıkar, dnSpyEx ile aç, ilgili metodu düzenle, APK'ya geri koy,"
-  echo "    ./tools/02-patch.sh mantığıyla yeniden imzala."
+  echo "    02-patch.sh mantığıyla yeniden imzala."
 elif grep -q 'libil2cpp.so' "$LIST"; then
   ok "Motor: Unity + IL2CPP  (zor taraf)"
   echo "    Kod native'e derlenmiş. İlgili dosyalar:"
@@ -36,13 +75,11 @@ fi
 
 echo
 info "Mimariler:"
-grep -oE 'lib/[a-z0-9_-]+/' "$LIST" | sort -u | sed 's|lib/||; s|/||; s/^/    /' || echo "    (native kütüphane yok)"
+grep -oE 'lib/[a-z0-9_-]+/' "$LIST" | sort -u | sed 's|lib/||; s|/||; s/^/    /' \
+  || echo "    (native kütüphane yok)"
 
-if grep -q 'assets/bin/Data/globalgamemanagers' "$LIST"; then
-  UV="$(unzip -p "$SRC" assets/bin/Data/globalgamemanagers 2>/dev/null \
-        | strings 2>/dev/null | grep -m1 -E '^20[0-9]{2}\.[0-9]+\.[0-9]+' || true)"
-  [ -n "$UV" ] && info "Unity sürümü: $UV"
-fi
+UV="$(unity_version "$SRC" || true)"
+[ -n "$UV" ] && info "Unity sürümü: $UV"
 
 echo
 info "Boyutça en büyük 10 dosya:"

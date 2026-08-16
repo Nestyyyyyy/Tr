@@ -22,7 +22,10 @@ mapfile -t PATHS < <(adb shell pm path "$PKG" | tr -d '\r' | sed -n 's/^package:
 info "${#PATHS[@]} adet APK parçası bulundu, çekiliyor..."
 for p in "${PATHS[@]}"; do
   name="$(basename "$p")"
-  adb pull "$p" "$WORK_DIR/splits/$name" >/dev/null || die "Çekilemedi: $p"
+  # Git Bash, "/data/app/..." gibi argümanları Windows yoluna çevirmeye çalışır.
+  # MSYS_NO_PATHCONV bunu kapatır; hedefi de göreli veriyoruz ki dönüşüme ihtiyaç kalmasın.
+  ( cd "$WORK_DIR/splits" && MSYS_NO_PATHCONV=1 adb pull "$p" "$name" >/dev/null ) \
+    || die "Çekilemedi: $p"
   printf '    %s (%s)\n' "$name" "$(du -h "$WORK_DIR/splits/$name" | cut -f1)"
 done
 

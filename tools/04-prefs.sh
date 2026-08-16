@@ -71,11 +71,15 @@ push_prefs() {
   adb shell "run-as $PKG sh -c 'base64 -d < .prefs.b64 > shared_prefs/$REMOTE && chmod 660 shared_prefs/$REMOTE && rm -f .prefs.b64'" >/dev/null \
     || die "Cihazda dosya yazılamadı (base64 aracı yok olabilir)."
 
-  # doğrula
-  local remote_sum local_sum
-  remote_sum="$(adb exec-out run-as "$PKG" cat "shared_prefs/$REMOTE" | cksum | awk '{print $1"-"$2}')"
-  local_sum="$(cksum < "$src" | awk '{print $1"-"$2}')"
-  [ "$remote_sum" = "$local_sum" ] || die "Doğrulama başarısız: cihazdaki dosya farklı."
+  # doğrula: cihazdaki dosyayı geri okuyup karşılaştır
+  local verify="$WORK_DIR/.verify.xml"
+  adb exec-out run-as "$PKG" cat "shared_prefs/$REMOTE" > "$verify" 2>/dev/null \
+    || die "Doğrulama için geri okunamadı."
+  if [ "$(file_sum "$verify")" != "$(file_sum "$src")" ]; then
+    rm -f "$verify"
+    die "Doğrulama başarısız: cihazdaki dosya yazdığımızdan farklı."
+  fi
+  rm -f "$verify"
   ok "Yazıldı ve doğrulandı: shared_prefs/$REMOTE"
 }
 
@@ -84,8 +88,8 @@ case "$CMD" in
     pull_prefs
     info "Dosya: shared_prefs/$REMOTE"
     echo
-    if command -v python3 >/dev/null 2>&1; then
-      python3 "$EDITOR_PY" list "$LOCAL"
+    if [ -n "$PYTHON" ]; then
+      "$PYTHON" "$EDITOR_PY" list "$LOCAL"
     else
       cat "$LOCAL"
     fi
@@ -105,15 +109,15 @@ case "$CMD" in
 
   get)
     KEY="${1:-}"; [ -n "$KEY" ] || die "Kullanım: $0 get <anahtar>"
-    command -v python3 >/dev/null 2>&1 || die "'get' için python3 gerekli."
+    need_python "Kur: https://www.python.org/downloads/ (Windows: kurulumda 'Add to PATH' işaretle)"
     pull_prefs
-    python3 "$EDITOR_PY" get "$LOCAL" "$KEY" || die "'$KEY' bulunamadı. Önce: $0 list"
+    "$PYTHON" "$EDITOR_PY" get "$LOCAL" "$KEY" || die "'$KEY' bulunamadı. Önce: $0 list"
     ;;
 
   set)
     KEY="${1:-}"; VAL="${2:-}"
     [ -n "$KEY" ] && [ -n "$VAL" ] || die "Kullanım: $0 set <anahtar> <değer>"
-    command -v python3 >/dev/null 2>&1 || die "'set' için python3 gerekli. Alternatif: pull -> elle düzenle -> push"
+    need_python "Alternatif: 'pull' -> dosyayı elle düzenle -> 'push'"
 
     adb shell am force-stop "$PKG" >/dev/null 2>&1 || true
     pull_prefs
@@ -122,7 +126,7 @@ case "$CMD" in
     BK="$OUT_DIR/prefs-backup-$(date +%Y%m%d-%H%M%S).xml"
     cp "$LOCAL" "$BK"; ok "Yedek alındı: $BK"
 
-    python3 "$EDITOR_PY" set "$LOCAL" "$KEY" "$VAL" \
+    "$PYTHON" "$EDITOR_PY" set "$LOCAL" "$KEY" "$VAL" \
       || die "'$KEY' kayıt dosyasında yok. Önce: $0 list"
 
     push_prefs "$LOCAL"

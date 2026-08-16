@@ -1,0 +1,115 @@
+# Windows kurulum yardımcısı — gerekli araçları kurar.
+#
+# Çalıştırma (PowerShell, yönetici GEREKMEZ):
+#   powershell -ExecutionPolicy Bypass -File .\windows\kurulum.ps1
+#
+# Kurdukları: Git for Windows (Git Bash), JDK 21, Python 3, Android platform-tools (adb).
+# Zaten kurulu olanları atlar. Sonrasında işlem Git Bash içinden yürür.
+
+function Say($msg)  { Write-Host "==> $msg" -ForegroundColor Cyan }
+function Good($msg) { Write-Host " ok  $msg" -ForegroundColor Green }
+function Note($msg) { Write-Host " dikkat $msg" -ForegroundColor Yellow }
+
+# PATH'i registry'den tazele — winget kurulumundan sonra bu process eski PATH'i taşır.
+function Update-PathFromRegistry {
+    $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+    $user    = [Environment]::GetEnvironmentVariable('Path', 'User')
+    $env:Path = (@($machine, $user) | Where-Object { $_ }) -join ';'
+}
+
+function Have($name) {
+    $cmd = Get-Command $name -ErrorAction SilentlyContinue
+    if (-not $cmd) { return $false }
+    # Windows'un "python.exe" Store kısayolu gerçek bir kurulum değildir.
+    if ($cmd.Source -and $cmd.Source -like '*\WindowsApps\*') { return $false }
+    return $true
+}
+
+function Install-WithWinget($id, $label, $probe) {
+    if (Have $probe) { Good "$label zaten kurulu"; return }
+    if (-not (Have 'winget')) {
+        Note "$label yok, winget de yok. Elle kur (README'deki bağlantılar)."
+        return
+    }
+    Say "$label kuruluyor (winget)..."
+    winget install --id $id -e --source winget --accept-package-agreements --accept-source-agreements
+    if ($LASTEXITCODE -ne 0) {
+        Note "$label kurulumu winget ile başarısız (kod $LASTEXITCODE). Elle kurman gerekebilir."
+    } else {
+        Good "$label kuruldu"
+    }
+    Update-PathFromRegistry
+}
+
+Say "Windows kurulum yardımcısı"
+Write-Host ""
+
+Update-PathFromRegistry
+
+Install-WithWinget 'Git.Git'                        'Git for Windows (Git Bash)' 'git'
+Install-WithWinget 'EclipseAdoptium.Temurin.21.JDK' 'JDK 21'                     'java'
+Install-WithWinget 'Python.Python.3.12'             'Python 3'                   'python'
+
+# --- adb: doğrudan Google'ın zip'inden, en güvenilir yol ---------------------
+$ptDir = Join-Path $env:LOCALAPPDATA 'Android\platform-tools'
+
+if (Have 'adb') {
+    Good "adb zaten PATH'te"
+} elseif (Test-Path (Join-Path $ptDir 'adb.exe')) {
+    Good "adb zaten kurulu: $ptDir"
+} else {
+    Say "Android platform-tools (adb) indiriliyor..."
+    $zip  = Join-Path $env:TEMP 'platform-tools.zip'
+    $dest = Join-Path $env:LOCALAPPDATA 'Android'
+    try {
+        New-Item -ItemType Directory -Force -Path $dest | Out-Null
+        Invoke-WebRequest -Uri 'https://dl.google.com/android/repository/platform-tools-latest-windows.zip' `
+                          -OutFile $zip -UseBasicParsing
+        Expand-Archive -Path $zip -DestinationPath $dest -Force
+        Remove-Item $zip -Force -ErrorAction SilentlyContinue
+        Good "adb kuruldu: $ptDir"
+    } catch {
+        Note "platform-tools indirilemedi: $($_.Exception.Message)"
+        Note "Elle indir: https://developer.android.com/tools/releases/platform-tools"
+    }
+}
+
+# PATH'e ekle (kullanıcı seviyesi, yönetici gerekmez)
+if (Test-Path (Join-Path $ptDir 'adb.exe')) {
+    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    if ($null -eq $userPath) { $userPath = '' }
+    if ($userPath -notlike "*$ptDir*") {
+        $newPath = ($userPath.TrimEnd(';') + ';' + $ptDir).TrimStart(';')
+        [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
+        Good "platform-tools kullanıcı PATH'ine eklendi"
+        Note "Kalıcı olması için YENİ bir pencere açman gerekiyor."
+    }
+    $env:Path = $env:Path.TrimEnd(';') + ';' + $ptDir
+}
+
+Write-Host ""
+Say "Durum"
+$missing = @()
+foreach ($tool in @('git', 'java', 'python', 'adb')) {
+    if (Have $tool) { Good "$tool bulundu" } else { Good "$tool -> YOK"; $missing += $tool }
+}
+if ($missing.Count -gt 0) {
+    Write-Host ""
+    Note ("Eksik: " + ($missing -join ', '))
+    Note "Yeni bir PowerShell penceresi acip bu script'i tekrar calistir; hala eksikse elle kur."
+}
+
+Write-Host ""
+Say "Sirada ne var"
+Write-Host @"
+  1. Telefonda: Ayarlar > Telefon hakkinda > 'Yapi numarasi'na 7 kez dokun
+     -> Gelistirici secenekleri > USB hata ayiklama: ACIK
+  2. Telefonu USB ile bagla, ekranda cikan 'Bu bilgisayara izin ver' penceresini onayla.
+  3. YENI bir pencere ac ve dogrula:   adb devices
+     Cihaz 'device' olarak gorunmeli ('unauthorized' ise izni onaylamamissin).
+  4. Bu klasorde sag tik > 'Open Git Bash here', sonra:
+
+       ./tr.sh all
+       ./tr.sh prefs list
+
+"@
