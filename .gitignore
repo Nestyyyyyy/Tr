@@ -1,0 +1,15 @@
+# İndirilen araçlar
+bin/
+
+# APK'lar ve ara dosyalar — telif nedeniyle repoya ASLA girmemeli
+work/
+out/
+*.apk
+*.apks
+*.xapk
+*.dex
+*.so
+*.idsig
+
+# Kayıt dosyası yedekleri (kişisel veri)
+prefs-backup-*.xml
