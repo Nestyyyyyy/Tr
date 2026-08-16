@@ -97,13 +97,15 @@ first_match() {  # first_match <dizin> <kalip>
 # APK'yı zipalign'lar + imzalar, sonucu <hedef> yoluna taşır.
 # İmzalayıcı çıktısı loglanır; bir şey ters giderse ekrana basılır.
 sign_apk() {  # sign_apk <imzasiz.apk> <hedef.apk>
-  local unsigned="$1" final="$2" log="$WORK_DIR/sign.log" produced base
+  local unsigned="$1" final="$2" log="$WORK_DIR/sign.log" produced
   [ -s "$unsigned" ] || die "İmzalanacak APK yok/boş: $unsigned"
   need_jar "$SIGNER_JAR"
   mkdir -p "$OUT_DIR" "$WORK_DIR"
 
-  base="$(basename "$unsigned" .apk)"
-  rm -f "$OUT_DIR/$base"-aligned*.apk "$OUT_DIR/$base"-aligned*.idsig
+  # uber-apk-signer cikti adini kendi belirliyor ve girdideki "-unsigned" ekini
+  # ATIYOR: menu-unsigned.apk -> menu-aligned-debugSigned.apk. Bu yuzden ada gore
+  # tahmin yurutmuyoruz; imzalamadan once temizleyip sonra tek eslesmeyi aliyoruz.
+  rm -f "$OUT_DIR"/*aligned*Signed.apk "$OUT_DIR"/*aligned*.idsig
 
   if ! java -jar "$SIGNER_JAR" -a "$unsigned" -o "$OUT_DIR" --allowResign > "$log" 2>&1; then
     warn "İmzalayıcı hata verdi. Son satırlar:"
@@ -111,7 +113,7 @@ sign_apk() {  # sign_apk <imzasiz.apk> <hedef.apk>
     die "İmzalama başarısız (tam log: $log)"
   fi
 
-  produced="$(first_match "$OUT_DIR" "$base-aligned*Signed.apk")"
+  produced="$(first_match "$OUT_DIR" '*aligned*Signed.apk')"
   if [ -z "$produced" ]; then
     warn "İmzalı dosya bulunamadı. İmzalayıcı çıktısı:"
     tail -20 "$log" | sed 's/^/    /' >&2
@@ -121,7 +123,7 @@ sign_apk() {  # sign_apk <imzasiz.apk> <hedef.apk>
   fi
 
   mv "$produced" "$final"
-  rm -f "$OUT_DIR/$base"-aligned*.idsig
+  rm -f "$OUT_DIR"/*aligned*.idsig
 }
 
 # 'jar' PATH'te olmayabilir (Windows'ta java kurulu ama JDK/bin PATH'te değil).
