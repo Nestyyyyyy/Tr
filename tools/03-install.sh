@@ -32,14 +32,27 @@ fi
 
 info "Kurulacak: $APK"
 
-# Yamalı sürüm zaten kuruluysa (ör. telefondan elle kurulduysa) hiçbir şeye dokunma.
-# run-as'ın çalışması, kurulu paketin debuggable olduğunun kesin kanıtı.
-if pkg_installed && adb shell run-as "$PKG" ls >/dev/null 2>&1; then
-  ok "Yamalı sürüm zaten kurulu ve run-as çalışıyor — kurulum adımı atlandı."
-  echo
-  info "Oyunu bir kez aç, birkaç saniye oyna ve ana menüye dön (kayıt dosyası böylece oluşur)."
-  info "Sonra: ./tr.sh prefs list"
-  exit 0
+# Kurulumu yalnızca cihazdaki APK ile YERELDEKİ AYNI dosya ise atla.
+# Eskiden "kurulu + run-as çalışıyor" yetiyordu; bu yüzden menülü sürümü kurmak
+# istediğinde eski (menüsüz) sürüm kurulu diye kurulum sessizce atlanıyordu.
+installed_apk_size() {
+  local path
+  path="$(adb shell pm path "$PKG" 2>/dev/null | tr -d '\r' | sed -n 's/^package://p' | head -1 || true)"
+  [ -n "$path" ] || return 1
+  adb shell "stat -c %s '$path'" 2>/dev/null | tr -d '\r'
+}
+
+if pkg_installed; then
+  LOCAL_SIZE="$(wc -c < "$APK" | tr -d ' ')"
+  DEVICE_SIZE="$(installed_apk_size || true)"
+  if [ -n "$DEVICE_SIZE" ] && [ "$DEVICE_SIZE" = "$LOCAL_SIZE" ] \
+     && adb shell run-as "$PKG" ls >/dev/null 2>&1; then
+    ok "Bu APK zaten kurulu (aynı boyut: $LOCAL_SIZE) — kurulum atlandı."
+    echo
+    info "Farklı bir sürüm kurmak istiyorsan dosya yolunu ver:  ./tr.sh install <apk>"
+    exit 0
+  fi
+  [ -n "$DEVICE_SIZE" ] && info "Cihazdaki sürüm farklı ($DEVICE_SIZE bayt), yenisi kurulacak."
 fi
 
 if pkg_installed; then
