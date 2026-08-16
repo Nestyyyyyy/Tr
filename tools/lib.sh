@@ -44,10 +44,6 @@ for _c in python3 python py; do
 done
 unset _c
 
-need_python() {
-  [ -n "$PYTHON" ] || die "python3 bulunamadı. $1"
-}
-
 # Dosya özeti — cksum her yerde yok (Git Bash), sırayla dene.
 file_sum() {
   if command -v md5sum >/dev/null 2>&1; then
@@ -89,6 +85,13 @@ pkg_installed() {
 # base64'ü platform bağımsız, tek satır üret (Linux -w0, macOS satır sarmaz)
 b64_oneline() {
   base64 < "$1" | tr -d '\n'
+}
+
+# prefs_awk <mode> <anahtar> <deger> <dosya>   (mode: list | get | set)
+# Anahtar/değer ENVIRON ile geçilir: "awk -v" kaçış dizilerini yorumlar, ENVIRON yorumlamaz —
+# yani "\1" gibi değerler birebir literal yazılır.
+prefs_awk() {
+  PREFS_MODE="$1" PREFS_KEY="$2" PREFS_VAL="$3" awk -f "$ROOT_DIR/tools/prefs_edit.awk" "$4"
 }
 
 # AndroidManifest.xml'e debuggable + allowBackup ekler. Yerinde düzenler.

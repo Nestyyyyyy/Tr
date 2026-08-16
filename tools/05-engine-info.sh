@@ -7,25 +7,31 @@ source "$(dirname "$0")/lib.sh"
 SRC="${1:-$WORK_DIR/original.apk}"
 [ -f "$SRC" ] || die "APK yok: $SRC  (önce ./tools/01-pull.sh)"
 
-# unzip Git Bash'te yok; python varsa onunla aynı işi yaparız.
-HAVE_UNZIP=0
-command -v unzip >/dev/null 2>&1 && HAVE_UNZIP=1
-if [ "$HAVE_UNZIP" = "0" ] && [ -z "$PYTHON" ]; then
-  die "unzip da python3 de yok. Birini kur (Windows: python.org, 'Add to PATH' işaretli)."
+# APK bir zip. Listelemek için sırayla: unzip -> python -> jar (JDK zaten zorunlu).
+# Git Bash'te unzip yok, python opsiyonel; jar her durumda var.
+HAVE_SIZES=1
+if command -v unzip >/dev/null 2>&1; then
+  LISTER=unzip
+elif [ -n "$PYTHON" ]; then
+  LISTER=python
+elif command -v jar >/dev/null 2>&1; then
+  LISTER=jar; HAVE_SIZES=0
+else
+  die "APK'yı listeleyecek araç yok (unzip / python3 / jar). JDK kurulu mu?"
 fi
 
 # "boyut tarih saat ad" biçiminde liste (unzip -l ile aynı sütun düzeni)
 list_apk() {
-  if [ "$HAVE_UNZIP" = "1" ]; then
-    unzip -l "$1"
-  else
-    "$PYTHON" -c '
+  case "$LISTER" in
+    unzip)  unzip -l "$1" ;;
+    python) "$PYTHON" -c '
 import sys, zipfile
 with zipfile.ZipFile(sys.argv[1]) as z:
     for i in z.infolist():
         print("%9d %s %s %s" % (i.file_size, "0000-00-00", "00:00", i.filename))
-' "$1"
-  fi
+' "$1" ;;
+    jar)    jar tf "$1" | awk '{ print "0 0000-00-00 00:00 " $0 }' ;;
+  esac
 }
 
 # Unity sürümünü globalgamemanagers içinden çıkar (bulamazsa sessizce boş döner)
@@ -64,7 +70,7 @@ if grep -q 'assets/bin/Data/Managed/Assembly-CSharp.dll' "$LIST"; then
 elif grep -q 'libil2cpp.so' "$LIST"; then
   ok "Motor: Unity + IL2CPP  (zor taraf)"
   echo "    Kod native'e derlenmiş. İlgili dosyalar:"
-  grep -E 'libil2cpp\.so|global-metadata\.dat' "$LIST" | sed 's/^/      /'
+  grep -E 'libil2cpp\.so|global-metadata\.dat' "$LIST" | awk '{ print "      " $4 }'
   echo
   echo "    Yol: Il2CppDumper ile global-metadata.dat + libil2cpp.so'dan sembolleri çıkar,"
   echo "    Ghidra/IDA'da hedef fonksiyonu bul, ARM64 talimatını yamala."
@@ -81,7 +87,9 @@ grep -oE 'lib/[a-z0-9_-]+/' "$LIST" | sort -u | sed 's|lib/||; s|/||; s/^/    /'
 UV="$(unity_version "$SRC" || true)"
 [ -n "$UV" ] && info "Unity sürümü: $UV"
 
-echo
-info "Boyutça en büyük 10 dosya:"
-sort -k1 -n -r "$LIST" | grep -E '^\s*[0-9]+' \
-  | awk '$4 != "" && $4 != "files" {printf "    %10s  %s\n", $1, $4}' | head -10
+if [ "$HAVE_SIZES" = "1" ]; then
+  echo
+  info "Boyutça en büyük 10 dosya:"
+  sort -k1 -n -r "$LIST" | grep -E '^\s*[0-9]+' \
+    | awk '$4 != "" && $4 != "files" {printf "    %10s  %s\n", $1, $4}' | head -10
+fi

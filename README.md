@@ -21,7 +21,7 @@ oyunun her sürümünde aynı şekilde çalışır.
 |---|---|
 | JDK 17+ | Windows: `windows\kurulum.ps1` · Linux: `sudo apt install openjdk-17-jdk` · macOS: `brew install openjdk@17` |
 | adb (platform-tools) | Windows: `windows\kurulum.ps1` · Linux: `sudo apt install android-tools-adb` · macOS: `brew install android-platform-tools` |
-| Python 3 | herhangi bir 3.x sürümü (3.10 / 3.12 / 3.13 ile test edildi). Opsiyonel ama tavsiye edilir: kayıt dosyasını listeleme/düzenleme kolaylığı |
+| Python 3 | **gerekmiyor.** Kayıt dosyası düzenleme `awk` ile yapılıyor, awk her yerde (Git Bash dahil) var. Kuruluysa `05-engine-info.sh` biraz daha ayrıntı verir |
 | Telefon | USB hata ayıklama açık, USB ile bağlı, Traffic Racer **Play Store'dan kurulu** |
 
 > APK'yı ben indirmiyorum ve sen de üçüncü parti "mod apk" sitelerinden indirme.
@@ -43,7 +43,7 @@ cd Tr
 powershell -ExecutionPolicy Bypass -File .\windows\kurulum.ps1
 ```
 
-Git for Windows, JDK 21, Python 3 ve adb'yi kurar; kurulu olanları atlar.
+Git for Windows, JDK 21 ve adb'yi kurar; kurulu olanları atlar. Python gerekmiyor.
 Git yoksa `git clone` da çalışmaz — o durumda önce https://git-scm.com/download/win
 adresinden Git'i kur, sonra bu adımı tekrarla.
 
@@ -116,9 +116,10 @@ değeri değiştirir → geri yazar → cihazdaki dosyayı geri okuyup karşıla
 | `tools/03-install.sh` | Orijinali kaldırır (imza farklı, üzerine kurulmaz), yamalıyı kurar, `run-as` erişimini test eder |
 | `tools/04-prefs.sh` | Kayıt dosyasını `run-as` ile okur/yazar: `list`, `guess`, `get`, `set`, `pull`, `push`, `backup` |
 | `tools/05-engine-info.sh` | Plan B: APK Mono mu IL2CPP mi, hangi dosyaya bakılacak |
+| `tools/prefs_edit.awk` | Prefs XML okuyucu-düzenleyici; değeri konum bularak değiştirir, biçimi bozmaz |
 | `tools/selftest.sh` | Cihaz/APK gerektirmeyen test: manifest yaması ve prefs düzenleyici mantığını doğrular |
 | `tr.sh` | Hepsinin tek giriş noktası (`make` olmayan Windows için) |
-| `windows/kurulum.ps1` | Windows'ta Git, JDK, Python ve adb kurar |
+| `windows/kurulum.ps1` | Windows'ta Git, JDK ve adb kurar |
 
 Farklı bir oyun için paket adını ver:
 
@@ -175,6 +176,11 @@ sil ve yeniden klonla.
 **(Windows) `./tr.sh: command not found` / `is not recognized`**
 PowerShell veya CMD'desin. Klasörde sağ tık → **"Open Git Bash here"**.
 
+**(Windows) `winget` bulunamadı**
+Microsoft Store'dan **"App Installer" (Uygulama Yükleyici)** kur, ya da araçları elle
+kur: Git → https://git-scm.com/download/win, JDK → https://adoptium.net,
+adb → https://developer.android.com/tools/releases/platform-tools
+
 **(Windows) `java` veya `adb` bulunamadı**
 `windows\kurulum.ps1` PATH'i değiştirdiyse **yeni** bir pencere açman gerekir; açık
 Git Bash eski PATH'i taşır.
@@ -211,8 +217,8 @@ make info    # Mono mu IL2CPP mi söyler
   çıktısı `zipalign verified` + `signature verified [v1, v2, v3]`.
 - Windows'un kullandığı kod yolları (unzip'siz Python fallback, `python`/`py` çözümü)
   Linux'ta simüle edilerek test edildi; Git Bash'in kendisinde çalıştırılmadı.
-- Test paketi Python 3.10, 3.12 ve 3.13 ile ayrı ayrı geçiyor; sürüme özgü bir şey
-  kullanılmıyor (yalnızca `re`, `sys`, `zipfile`).
+- Kayıt dosyası düzenleyici `awk` ile yazıldı; 35 testin tamamı mawk ile geçiyor
+  (mawk, gawk'tan katı bir uygulama — POSIX dışı hiçbir şey kullanılmıyor).
 - `windows/kurulum.ps1` PowerShell gerektirdiği için burada çalıştırılamadı. Yaptığı iş
   winget çağrıları + bir zip indirmesi; başarısız olursa README'deki elle kurulum
   bağlantıları aynı sonucu verir.

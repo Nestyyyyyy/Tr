@@ -25,12 +25,10 @@ for f in "$ROOT_DIR"/tools/*.sh; do
     check "$(basename "$f")" "ok" "sözdizimi hatası"
   fi
 done
-if [ -n "$PYTHON" ]; then
-  if "$PYTHON" -c "import ast,sys; ast.parse(open('$ROOT_DIR/tools/prefs_edit.py').read())"; then
-    check "prefs_edit.py" "ok" "ok"
-  else
-    check "prefs_edit.py" "ok" "sözdizimi hatası"
-  fi
+if awk -f "$ROOT_DIR/tools/prefs_edit.awk" /dev/null >/dev/null 2>&1; then
+  check "prefs_edit.awk" "ok" "ok"
+else
+  check "prefs_edit.awk" "ok" "sözdizimi hatası"
 fi
 
 # --- 2. manifest yaması ----------------------------------------------------
@@ -68,14 +66,10 @@ check "allowBackup yoksa eklenir"         1 "$(grep -c 'android:allowBackup="tru
 check "debuggable yoksa eklenir"          1 "$(grep -c 'android:debuggable="true"' "$M2")"
 
 # --- 3. prefs düzenleyici --------------------------------------------------
-if [ -z "$PYTHON" ]; then
-  warn "python3 yok, prefs testleri atlandı"
-else
-  echo; info "prefs_edit.py"
-  PY="$ROOT_DIR/tools/prefs_edit.py"
-  P="$TMPD/prefs.xml"
-  fixture() {
-    cat > "$P" <<'XML'
+echo; info "prefs_edit.awk"
+P="$TMPD/prefs.xml"
+fixture() {
+  cat > "$P" <<'XML'
 <?xml version='1.0' encoding='utf-8' standalone='yes' ?>
 <map>
     <int name="cash" value="1500" />
@@ -85,40 +79,61 @@ else
     <string name="playerName">emre</string>
 </map>
 XML
-  }
+}
 
-  fixture
-  check "list 5 anahtar bulur"  "5" "$("$PYTHON" "$PY" list "$P" | sed -n 's/.*toplam \([0-9]*\) anahtar/\1/p')"
-  check "get int"               "1500"  "$("$PYTHON" "$PY" get "$P" cash)"
-  check "get string"            "emre"  "$("$PYTHON" "$PY" get "$P" playerName)"
-  check "get boolean"           "false" "$("$PYTHON" "$PY" get "$P" car_3_owned)"
+# awk_get <anahtar> ; awk_set <anahtar> <deger> ; awk_count
+awk_get()   { prefs_awk get "$1" '' "$P"; }
+awk_set()   { prefs_awk set "$1" "$2" "$P" > "$P.new" && mv "$P.new" "$P"; }
+awk_count() { prefs_awk list '' '' "$P" | wc -l | tr -d ' '; }
 
-  rc=0; "$PYTHON" "$PY" get "$P" yokBoyleAnahtar >/dev/null 2>&1 || rc=$?
-  check "olmayan anahtar -> 3" "3" "$rc"
+fixture
+check "list 5 anahtar bulur"       "5"     "$(awk_count)"
+check "get int"                    "1500"  "$(awk_get cash)"
+check "get string"                 "emre"  "$(awk_get playerName)"
+check "get boolean"                "false" "$(awk_get car_3_owned)"
+check "get float"                  "0.8"   "$(awk_get sfxVolume)"
 
-  fixture
-  "$PYTHON" "$PY" set "$P" cash 999999 >/dev/null
-  check "set int"                    "999999" "$("$PYTHON" "$PY" get "$P" cash)"
-  check "komşu anahtar bozulmadı"    "42"     "$("$PYTHON" "$PY" get "$P" bestScore)"
-  check "anahtar sayısı sabit"       "5"      "$("$PYTHON" "$PY" list "$P" | sed -n 's/.*toplam \([0-9]*\) anahtar/\1/p')"
+rc=0; awk_get yokBoyleAnahtar >/dev/null 2>&1 || rc=$?
+check "olmayan anahtar -> 3"       "3" "$rc"
 
-  "$PYTHON" "$PY" set "$P" car_3_owned true >/dev/null
-  check "set boolean"                "true"   "$("$PYTHON" "$PY" get "$P" car_3_owned)"
+fixture
+awk_set cash 999999
+check "set int"                    "999999" "$(awk_get cash)"
+check "komşu anahtar bozulmadı"    "42"     "$(awk_get bestScore)"
+check "anahtar sayısı sabit"       "5"      "$(awk_count)"
 
-  "$PYTHON" "$PY" set "$P" playerName "hız kralı" >/dev/null
-  check "set string (utf-8, boşluk)" "hız kralı" "$("$PYTHON" "$PY" get "$P" playerName)"
+awk_set car_3_owned true
+check "set boolean"                "true"   "$(awk_get car_3_owned)"
 
-  # regex kaçışlarının literal işlendiğini doğrula
-  "$PYTHON" "$PY" set "$P" playerName 'a\1b\g<0>c' >/dev/null
-  check "değer literal yazılır"      'a\1b\g<0>c' "$("$PYTHON" "$PY" get "$P" playerName)"
+awk_set playerName "hız kralı"
+check "set string (utf-8, boşluk)" "hız kralı" "$(awk_get playerName)"
 
-  # "cash" ile "cashX" karışmamalı (tam ad eşleşmesi)
-  fixture
-  rc=0; "$PYTHON" "$PY" set "$P" cas 1 >/dev/null 2>&1 || rc=$?
-  check "kısmi ad eşleşmez -> 3"     "3" "$rc"
+# awk -v kaçışları yorumlar, ENVIRON yorumlamaz — literal kalmalı
+awk_set playerName 'a\1b\g<0>c&d'
+check "değer literal yazılır"      'a\1b\g<0>c&d' "$(awk_get playerName)"
 
-  check "XML kökü korundu"           "1" "$(grep -c '</map>' "$P")"
-fi
+# XML'de anlamlı karakterler değeri bozmamalı
+awk_set playerName 'x"y>z'
+check "tırnak/köşeli değer"        'x"y>z' "$(awk_get playerName)"
+
+# "cash" ile "cas" karışmamalı (tam ad eşleşmesi)
+fixture
+rc=0; awk_set cas 1 >/dev/null 2>&1 || rc=$?
+check "kısmi ad eşleşmez -> 3"     "3" "$rc"
+check "başarısız set dosyayı bozmadı" "1500" "$(awk_get cash)"
+
+check "XML kökü korundu"           "1" "$(grep -c '</map>' "$P")"
+
+# aynı değeri iki kez yazmak tek satırı değiştirmeli
+fixture
+awk_set bestScore 7
+awk_set bestScore 7
+check "tekrar set güvenli"         "1" "$(grep -c 'name="bestScore"' "$P")"
+
+# satıra sığmayan string değerinde bozmak yerine durmalı (çıkış 4)
+printf '<map>\n  <string name="uzun">bir\nikinci</string>\n</map>\n' > "$P"
+rc=0; prefs_awk set uzun yeni "$P" > /dev/null 2>&1 || rc=$?
+check "çok satırlı değerde durur -> 4" "4" "$rc"
 
 # --- özet ------------------------------------------------------------------
 echo

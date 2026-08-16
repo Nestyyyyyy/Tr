@@ -15,7 +15,6 @@ source "$(dirname "$0")/lib.sh"
 
 CMD="${1:-list}"; shift || true
 LOCAL="$WORK_DIR/prefs.xml"
-EDITOR_PY="$ROOT_DIR/tools/prefs_edit.py"
 
 need_device
 pkg_installed || die "'$PKG' kurulu değil."
@@ -88,10 +87,16 @@ case "$CMD" in
     pull_prefs
     info "Dosya: shared_prefs/$REMOTE"
     echo
-    if [ -n "$PYTHON" ]; then
-      "$PYTHON" "$EDITOR_PY" list "$LOCAL"
-    else
+    TSV="$(prefs_awk list '' '' "$LOCAL")"
+    if [ -z "$TSV" ]; then
+      warn "Tanınan anahtar yok. Ham dosya: $LOCAL"
       cat "$LOCAL"
+    else
+      W="$(printf '%s\n' "$TSV" | awk -F'\t' '{ if (length($1) > m) m = length($1) } END { print m + 0 }')"
+      printf '%s\n' "$TSV" | sort | awk -F'\t' -v w="$W" '
+        BEGIN { fmt = "  %-" w "s  %-8s %s\n" }
+        { v = $3; if (length(v) > 60) v = substr(v, 1, 57) "..."; printf fmt, $1, $2, v }'
+      printf '\n  toplam %s anahtar\n' "$(printf '%s\n' "$TSV" | wc -l | tr -d ' ')"
     fi
     echo
     info "Değiştirmek için:  ./tools/04-prefs.sh set <anahtar> <değer>"
@@ -109,15 +114,13 @@ case "$CMD" in
 
   get)
     KEY="${1:-}"; [ -n "$KEY" ] || die "Kullanım: $0 get <anahtar>"
-    need_python "Kur: https://www.python.org/downloads/ (Windows: kurulumda 'Add to PATH' işaretle)"
     pull_prefs
-    "$PYTHON" "$EDITOR_PY" get "$LOCAL" "$KEY" || die "'$KEY' bulunamadı. Önce: $0 list"
+    prefs_awk get "$KEY" '' "$LOCAL" || die "'$KEY' bulunamadı. Önce: $0 list"
     ;;
 
   set)
     KEY="${1:-}"; VAL="${2:-}"
     [ -n "$KEY" ] && [ -n "$VAL" ] || die "Kullanım: $0 set <anahtar> <değer>"
-    need_python "Alternatif: 'pull' -> dosyayı elle düzenle -> 'push'"
 
     adb shell am force-stop "$PKG" >/dev/null 2>&1 || true
     pull_prefs
@@ -126,8 +129,14 @@ case "$CMD" in
     BK="$OUT_DIR/prefs-backup-$(date +%Y%m%d-%H%M%S).xml"
     cp "$LOCAL" "$BK"; ok "Yedek alındı: $BK"
 
-    "$PYTHON" "$EDITOR_PY" set "$LOCAL" "$KEY" "$VAL" \
+    OLD="$(prefs_awk get "$KEY" '' "$LOCAL")" \
       || die "'$KEY' kayıt dosyasında yok. Önce: $0 list"
+
+    # Önce geçici dosyaya yaz: awk hata verirse kaynak dosya bozulmasın.
+    prefs_awk set "$KEY" "$VAL" "$LOCAL" > "$LOCAL.new" \
+      || { rm -f "$LOCAL.new"; die "Değiştirilemedi: $KEY"; }
+    mv "$LOCAL.new" "$LOCAL"
+    ok "$KEY: $OLD -> $VAL"
 
     push_prefs "$LOCAL"
     ok "Oyunu şimdi aç ve kontrol et."

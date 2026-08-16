@@ -1,10 +1,11 @@
-# Windows kurulum yardımcısı — gerekli araçları kurar.
+﻿# Windows kurulum yardımcısı — gerekli araçları kurar.
 #
 # Çalıştırma (PowerShell, yönetici GEREKMEZ):
 #   powershell -ExecutionPolicy Bypass -File .\windows\kurulum.ps1
 #
-# Kurdukları: Git for Windows (Git Bash), JDK 21, Python 3, Android platform-tools (adb).
-# Zaten kurulu olanları atlar. Sonrasında işlem Git Bash içinden yürür.
+# Kurdukları: Git for Windows (Git Bash), JDK 21, Android platform-tools (adb).
+# Python GEREKMİYOR (opsiyonel). Zaten kurulu olanları atlar.
+# Sonrasında işlem Git Bash içinden yürür.
 
 function Say($msg)  { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Good($msg) { Write-Host " ok  $msg" -ForegroundColor Green }
@@ -30,7 +31,9 @@ function Have($name) {
 function Install-WithWinget($ids, $label, $probe) {
     if (Have $probe) { Good "$label zaten kurulu"; return }
     if (-not (Have 'winget')) {
-        Note "$label yok, winget de yok. Elle kur (README'deki bağlantılar)."
+        Note "$label yok ve winget de yok."
+        Note "  winget'i almak icin: Microsoft Store > 'App Installer' (Uygulama Yukleyici) kur,"
+        Note "  ya da $label'i elle kur (README'deki baglantilar)."
         return
     }
     foreach ($id in @($ids)) {
@@ -50,8 +53,14 @@ Update-PathFromRegistry
 
 Install-WithWinget 'Git.Git' 'Git for Windows (Git Bash)' 'git'
 Install-WithWinget @('EclipseAdoptium.Temurin.21.JDK', 'EclipseAdoptium.Temurin.17.JDK') 'JDK' 'java'
-# Herhangi bir Python 3.x yeter; kurulu olan varsa bu adım atlanır.
-Install-WithWinget @('Python.Python.3.13', 'Python.Python.3.12') 'Python 3' 'python'
+
+# Python ARTIK GEREKLİ DEĞİL — kayıt dosyası düzenleme awk ile yapılıyor ve awk
+# Git Bash'in içinde geliyor. Kuruluysa 05-engine-info.sh biraz daha ayrıntı verir.
+if (Have 'python') {
+    Good "Python 3 kurulu (opsiyonel, zaten var)"
+} else {
+    Good "Python yok — sorun değil, zincir Python'suz çalışıyor (opsiyonel bağımlılık)"
+}
 
 # --- adb: doğrudan Google'ın zip'inden, en güvenilir yol ---------------------
 $ptDir = Join-Path $env:LOCALAPPDATA 'Android\platform-tools'
@@ -93,13 +102,18 @@ if (Test-Path (Join-Path $ptDir 'adb.exe')) {
 Write-Host ""
 Say "Durum"
 $missing = @()
-foreach ($tool in @('git', 'java', 'python', 'adb')) {
-    if (Have $tool) { Good "$tool bulundu" } else { Good "$tool -> YOK"; $missing += $tool }
+foreach ($tool in @('git', 'java', 'adb')) {
+    if (Have $tool) { Good "$tool bulundu" } else { Note "$tool -> YOK (gerekli)"; $missing += $tool }
 }
+if (Have 'python') { Good "python bulundu (opsiyonel)" } else { Good "python yok (opsiyonel, gerekmiyor)" }
+
 if ($missing.Count -gt 0) {
     Write-Host ""
-    Note ("Eksik: " + ($missing -join ', '))
+    Note ("Eksik ve gerekli: " + ($missing -join ', '))
     Note "Yeni bir PowerShell penceresi acip bu script'i tekrar calistir; hala eksikse elle kur."
+} else {
+    Write-Host ""
+    Good "Gerekli her sey hazir."
 }
 
 Write-Host ""
