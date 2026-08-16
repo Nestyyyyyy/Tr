@@ -103,6 +103,26 @@ const ITEMS: MenuItem[] = [
 
 let menuBuilt = false;
 
+// Frida 17'nin Java koprusu, JS degerini hangi asiri yuklemeye gonderecegini
+// secemiyor (setText/setTextSize/Color.argb hepsinde birden fazla imza var).
+// Bu yuzden imzayi elle sabitliyoruz.
+function jstr(s: string): any {
+    return Java.use("java.lang.String").$new(s);
+}
+
+function setText(view: any, s: string): void {
+    view.setText.overload("java.lang.CharSequence").call(view, jstr(s));
+}
+
+function setTextSize(view: any, size: number): void {
+    view.setTextSize.overload("float").call(view, size);
+}
+
+/** Java'nin int renk formati. Color.argb da asiri yuklu, o yuzden elle hesapliyoruz. */
+function argb(a: number, r: number, g: number, b: number): number {
+    return ((a << 24) | (r << 16) | (g << 8) | b) | 0;
+}
+
 function buildMenu(activity: any): void {
     const LinearLayout = Java.use("android.widget.LinearLayout");
     const Button = Java.use("android.widget.Button");
@@ -110,8 +130,6 @@ function buildMenu(activity: any): void {
     const FrameLayoutParams = Java.use("android.widget.FrameLayout$LayoutParams");
     const LinearParams = Java.use("android.widget.LinearLayout$LayoutParams");
     const Gravity = Java.use("android.view.Gravity");
-    const Color = Java.use("android.graphics.Color");
-    const View = Java.use("android.view.View");
 
     const WRAP = -2;
     const MATCH = -1;
@@ -151,38 +169,42 @@ function buildMenu(activity: any): void {
     // --- panel ---------------------------------------------------------------
     panel = LinearLayout.$new(activity);
     panel.setOrientation(1); // VERTICAL
-    panel.setBackgroundColor(Color.argb(220, 15, 15, 20));
+    panel.setBackgroundColor(argb(220, 15, 15, 20));
     panel.setPadding(16, 16, 16, 16);
     panel.setVisibility(8); // GONE — başta kapalı
 
     const title = TextView.$new(activity);
-    title.setText("TRAFFIC RACER — MOD");
-    title.setTextColor(Color.argb(255, 120, 220, 255));
-    title.setTextSize(14);
+    setText(title, "TRAFFIC RACER - MOD");
+    title.setTextColor(argb(255, 120, 220, 255));
+    setTextSize(title, 14);
     title.setPadding(0, 0, 0, 12);
     panel.addView(title);
 
     ITEMS.forEach((item, i) => {
+      try {
         const b = Button.$new(activity);
-        b.setText(item.label);
+        setText(b, item.label);
         b.setAllCaps(false);
-        b.setTextSize(13);
-        b.setTextColor(Color.argb(255, 235, 235, 235));
-        b.setBackgroundColor(Color.argb(255, 45, 45, 55));
+        setTextSize(b, 13);
+        b.setTextColor(argb(255, 235, 235, 235));
+        b.setBackgroundColor(argb(255, 45, 45, 55));
         b.setOnClickListener(mkClick(i));
         const lp = LinearParams.$new(MATCH, WRAP);
         lp.setMargins(0, 4, 0, 4);
         b.setLayoutParams(lp);
         panel.addView(b);
+      } catch (e: any) {
+        log(`düğme eklenemedi (${item.label}): ${e.message ?? e}`);
+      }
     });
 
     // --- açma düğmesi --------------------------------------------------------
     const toggle = Button.$new(activity);
-    toggle.setText("MOD");
+    setText(toggle, "MOD");
     toggle.setAllCaps(false);
-    toggle.setTextSize(12);
-    toggle.setTextColor(Color.argb(255, 255, 255, 255));
-    toggle.setBackgroundColor(Color.argb(200, 200, 40, 60));
+    setTextSize(toggle, 12);
+    toggle.setTextColor(argb(255, 255, 255, 255));
+    toggle.setBackgroundColor(argb(200, 200, 40, 60));
     toggle.setOnClickListener(mkClick(-1));
 
     // --- ekrana ekle ---------------------------------------------------------
@@ -225,8 +247,12 @@ function main(): void {
 
     Il2Cpp.perform(() => {
         log(`il2cpp hazır — unity ${Il2Cpp.unityVersion}`);
-        const names = Il2Cpp.domain.assemblies.map(a => a.name).join(", ");
-        log(`assembly'ler: ${names}`);
+        // Sınıf listesini kendiliğinden yaz: menüden düğmeye basmaya gerek kalmasın.
+        try {
+            dumpClassNames();
+        } catch (e: any) {
+            log(`sınıf listesi yazılamadı: ${e.message ?? e}`);
+        }
     });
 }
 

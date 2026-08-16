@@ -16909,6 +16909,18 @@ std_string_c_str (StdString * self)
     { label: "Tam d\xF6k\xFCm (yava\u015F)", run: () => dumpClasses() }
   ];
   var menuBuilt = false;
+  function jstr(s) {
+    return Java.use("java.lang.String").$new(s);
+  }
+  function setText(view, s) {
+    view.setText.overload("java.lang.CharSequence").call(view, jstr(s));
+  }
+  function setTextSize(view, size) {
+    view.setTextSize.overload("float").call(view, size);
+  }
+  function argb(a, r, g, b) {
+    return a << 24 | r << 16 | g << 8 | b | 0;
+  }
   function buildMenu(activity) {
     const LinearLayout = Java.use("android.widget.LinearLayout");
     const Button = Java.use("android.widget.Button");
@@ -16916,8 +16928,6 @@ std_string_c_str (StdString * self)
     const FrameLayoutParams = Java.use("android.widget.FrameLayout$LayoutParams");
     const LinearParams = Java.use("android.widget.LinearLayout$LayoutParams");
     const Gravity = Java.use("android.view.Gravity");
-    const Color = Java.use("android.graphics.Color");
-    const View = Java.use("android.view.View");
     const WRAP = -2;
     const MATCH = -1;
     let panel;
@@ -16948,34 +16958,38 @@ std_string_c_str (StdString * self)
     };
     panel = LinearLayout.$new(activity);
     panel.setOrientation(1);
-    panel.setBackgroundColor(Color.argb(220, 15, 15, 20));
+    panel.setBackgroundColor(argb(220, 15, 15, 20));
     panel.setPadding(16, 16, 16, 16);
     panel.setVisibility(8);
     const title = TextView.$new(activity);
-    title.setText("TRAFFIC RACER \u2014 MOD");
-    title.setTextColor(Color.argb(255, 120, 220, 255));
-    title.setTextSize(14);
+    setText(title, "TRAFFIC RACER - MOD");
+    title.setTextColor(argb(255, 120, 220, 255));
+    setTextSize(title, 14);
     title.setPadding(0, 0, 0, 12);
     panel.addView(title);
     ITEMS.forEach((item, i) => {
-      const b = Button.$new(activity);
-      b.setText(item.label);
-      b.setAllCaps(false);
-      b.setTextSize(13);
-      b.setTextColor(Color.argb(255, 235, 235, 235));
-      b.setBackgroundColor(Color.argb(255, 45, 45, 55));
-      b.setOnClickListener(mkClick(i));
-      const lp = LinearParams.$new(MATCH, WRAP);
-      lp.setMargins(0, 4, 0, 4);
-      b.setLayoutParams(lp);
-      panel.addView(b);
+      try {
+        const b = Button.$new(activity);
+        setText(b, item.label);
+        b.setAllCaps(false);
+        setTextSize(b, 13);
+        b.setTextColor(argb(255, 235, 235, 235));
+        b.setBackgroundColor(argb(255, 45, 45, 55));
+        b.setOnClickListener(mkClick(i));
+        const lp = LinearParams.$new(MATCH, WRAP);
+        lp.setMargins(0, 4, 0, 4);
+        b.setLayoutParams(lp);
+        panel.addView(b);
+      } catch (e) {
+        log(`d\xFC\u011Fme eklenemedi (${item.label}): ${e.message ?? e}`);
+      }
     });
     const toggle = Button.$new(activity);
-    toggle.setText("MOD");
+    setText(toggle, "MOD");
     toggle.setAllCaps(false);
-    toggle.setTextSize(12);
-    toggle.setTextColor(Color.argb(255, 255, 255, 255));
-    toggle.setBackgroundColor(Color.argb(200, 200, 40, 60));
+    setTextSize(toggle, 12);
+    toggle.setTextColor(argb(255, 255, 255, 255));
+    toggle.setBackgroundColor(argb(200, 200, 40, 60));
     toggle.setOnClickListener(mkClick(-1));
     const wrapper = LinearLayout.$new(activity);
     wrapper.setOrientation(1);
@@ -17011,8 +17025,11 @@ std_string_c_str (StdString * self)
     });
     Il2Cpp.perform(() => {
       log(`il2cpp haz\u0131r \u2014 unity ${Il2Cpp.unityVersion}`);
-      const names = Il2Cpp.domain.assemblies.map((a) => a.name).join(", ");
-      log(`assembly'ler: ${names}`);
+      try {
+        dumpClassNames();
+      } catch (e) {
+        log(`s\u0131n\u0131f listesi yaz\u0131lamad\u0131: ${e.message ?? e}`);
+      }
     });
   }
   main();
