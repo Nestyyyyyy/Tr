@@ -114,7 +114,7 @@ değeri değiştirir → geri yazar → cihazdaki dosyayı geri okuyup karşıla
 | `tools/01-pull.sh` | `pm path` ile APK yollarını bulur, çeker; App Bundle ise APKEditor ile tek APK'ya birleştirir → `work/original.apk` |
 | `tools/02-patch.sh` | `apktool d -s` (dex'e dokunmaz) → manifest'e `debuggable` + `allowBackup` → `apktool b` → zipalign + imza → `out/<paket>-debuggable.apk` |
 | `tools/03-install.sh` | Orijinali kaldırır (imza farklı, üzerine kurulmaz), yamalıyı kurar, `run-as` erişimini test eder |
-| `tools/04-prefs.sh` | Kayıt dosyasını `run-as` ile okur/yazar: `list`, `guess`, `get`, `set`, `pull`, `push`, `backup` |
+| `tools/04-prefs.sh` | Kayıt dosyasını `run-as` ile okur/yazar: `list`, `guess`, `get`, `set`, `add`, `pull`, `push`, `backup` |
 | `tools/05-engine-info.sh` | Plan B: APK Mono mu IL2CPP mi, hangi dosyaya bakılacak |
 | `tools/prefs_edit.awk` | Prefs XML okuyucu-düzenleyici; değeri konum bularak değiştirir, biçimi bozmaz |
 | `tools/selftest.sh` | Cihaz/APK gerektirmeyen test: manifest yaması ve prefs düzenleyici mantığını doğrular |
@@ -188,6 +188,23 @@ Git Bash eski PATH'i taşır.
 **(Windows) `adb devices` cihazı hiç göstermiyor**
 USB sürücüsü eksik. Telefonu "dosya aktarımı (MTP)" moduna al, olmazsa üreticinin USB
 driver'ını kur. Kablo veri taşımıyorsa (bazı şarj kabloları) hiçbir şey görünmez.
+
+---
+
+## Değer gizlenmişse: `add`
+
+Bazı oyunlar parayı düz yazmaz, sabit bir sayıya ekleyerek gizler (Traffic Racer bunu
+yapıyor: değer `-8584146976045627328` gibi görünür). Tabanı çözmeye gerek yok — fark
+korunduğu için sadece **eklemek** yeter:
+
+```bash
+./tr.sh prefs add <anahtar> <miktar>      # miktar = istediğin para - şu anki para
+```
+
+Hangi anahtarın para olduğunu bulmak için: değerleri not et, oyunda bilinen bir miktar
+para kazan, tekrar `list` çek — kazandığın kadar artan anahtar odur.
+
+`add` değeri 64-bit tam sayı olarak okur, ekler, taşma olursa yazmadan durur.
 
 ---
 

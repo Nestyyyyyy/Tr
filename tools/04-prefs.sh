@@ -7,6 +7,7 @@
 #   ./tools/04-prefs.sh guess           # para/altın olabilecek anahtarları tahmin et
 #   ./tools/04-prefs.sh get <anahtar>
 #   ./tools/04-prefs.sh set <anahtar> <değer>
+#   ./tools/04-prefs.sh add <anahtar> <miktar>   # sayısal değere ekler (eksi de olur)
 #   ./tools/04-prefs.sh backup          # kayıt dosyasını out/ altına yedekle
 #   ./tools/04-prefs.sh pull [dosya]    # cihazdan çek
 #   ./tools/04-prefs.sh push [dosya]    # elle düzenlediğin dosyayı geri yaz
@@ -142,6 +143,36 @@ case "$CMD" in
     ok "Oyunu şimdi aç ve kontrol et."
     ;;
 
+  add)
+    KEY="${1:-}"; DELTA="${2:-}"
+    [ -n "$KEY" ] && [ -n "$DELTA" ] || die "Kullanım: $0 add <anahtar> <miktar>"
+    case "$DELTA" in ''|*[!0-9-]*|-*-*) die "Miktar tam sayı olmalı: $DELTA" ;; esac
+
+    adb shell am force-stop "$PKG" >/dev/null 2>&1 || true
+    pull_prefs
+
+    CUR="$(prefs_awk get "$KEY" '' "$LOCAL")" || die "'$KEY' bulunamadı. Önce: $0 list"
+    case "$CUR" in ''|*[!0-9-]*|-*-*) die "'$KEY' sayısal değil ($CUR) — 'add' kullanılamaz." ;; esac
+
+    # Bash aritmetiği 64-bit; gizlenmiş değerler zaten int64 sınırında, taşmayı kontrol et.
+    NEW=$(( CUR + DELTA ))
+    if { [ "$DELTA" -gt 0 ] && [ "$NEW" -lt "$CUR" ]; } || { [ "$DELTA" -lt 0 ] && [ "$NEW" -gt "$CUR" ]; }; then
+      die "64-bit taşma olurdu ($CUR + $DELTA). Daha küçük bir miktar dene."
+    fi
+
+    mkdir -p "$OUT_DIR"
+    BK="$OUT_DIR/prefs-backup-$(date +%Y%m%d-%H%M%S).xml"
+    cp "$LOCAL" "$BK"; ok "Yedek alındı: $BK"
+
+    prefs_awk set "$KEY" "$NEW" "$LOCAL" > "$LOCAL.new" \
+      || { rm -f "$LOCAL.new"; die "Değiştirilemedi: $KEY"; }
+    mv "$LOCAL.new" "$LOCAL"
+    ok "$KEY: $CUR -> $NEW  (fark: $DELTA)"
+
+    push_prefs "$LOCAL"
+    ok "Oyunu şimdi aç ve kontrol et."
+    ;;
+
   pull)
     pull_prefs
     ok "Çekildi -> $LOCAL  (elle düzenleyip '$0 push' ile geri yaz)"
@@ -160,6 +191,6 @@ case "$CMD" in
     ;;
 
   *)
-    die "Bilinmeyen komut: $CMD  (list | guess | get | set | pull | push | backup)"
+    die "Bilinmeyen komut: $CMD  (list | guess | get | set | add | pull | push | backup)"
     ;;
 esac
